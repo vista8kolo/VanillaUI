@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.1
+    VanillaUI v0.2
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.1.0",
+    Version = "0.2.0",
     Flags = {},
 }
 
@@ -19,6 +19,13 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local CurrentCamera = Workspace.CurrentCamera
+
+local DISCORD_INVITE = "https://discord.gg/CJP24bGhGJ"
+local DISCORD_BLURPLE = Color3.fromRGB(88, 101, 242)
+local DISCORD_BLURPLE_HOVER = Color3.fromRGB(105, 116, 255)
+local PRIMARY_TAB_LIMIT = 5
+local FLOATING_PANEL_OFFSET = 60
+local NOTIFICATION_EXTRA_DURATION = 2
 
 local THEME = {
     Accent = Color3.fromRGB(208, 193, 162),
@@ -202,6 +209,62 @@ local function serializeValue(value)
     return nil
 end
 
+local SEARCH_ALIASES = {
+    aim = "aimlock",
+    apuntar = "aimlock",
+    punteria = "aimlock",
+    mira = "aimlock",
+    circulo = "fov",
+    radio = "fov",
+    pared = "wallcheck",
+    muro = "wallcheck",
+    vision = "wallcheck",
+    cuerpos = "esp",
+    cuerpo = "esp",
+    jugadores = "esp",
+    rendimiento = "fps",
+    optimizacion = "fps",
+    configuracion = "ajustes",
+    configuraciones = "ajustes",
+    settings = "ajustes",
+}
+
+local function normalizeSearchText(value)
+    value = string.lower(tostring(value or ""))
+    value = value:gsub("[áàäâ]", "a")
+        :gsub("[éèëê]", "e")
+        :gsub("[íìïî]", "i")
+        :gsub("[óòöô]", "o")
+        :gsub("[úùüû]", "u")
+        :gsub("ñ", "n")
+        :gsub("ç", "c")
+        :gsub("[^%w%s%+%-_]", " ")
+        :gsub("%s+", " ")
+        :gsub("^%s+", "")
+        :gsub("%s+$", "")
+    return value
+end
+
+local function expandSearchTerms(value)
+    local terms = {}
+    for term in normalizeSearchText(value):gmatch("%S+") do
+        terms[#terms + 1] = SEARCH_ALIASES[term] or term
+    end
+    return terms
+end
+
+local function searchTextMatches(blob, terms)
+    if #terms == 0 then
+        return false
+    end
+    for _, term in ipairs(terms) do
+        if not string.find(blob, term, 1, true) then
+            return false
+        end
+    end
+    return true
+end
+
 local WindowMethods = {}
 WindowMethods.__index = WindowMethods
 
@@ -219,6 +282,9 @@ function ElementMethods:SetVisible(visible)
     if self.Object then
         self.Object.Visible = self.Visible
     end
+    if self.Window and type(self.Window._refreshSearchResults) == "function" then
+        task.defer(self.Window._refreshSearchResults)
+    end
     return self
 end
 
@@ -228,6 +294,18 @@ function ElementMethods:SetTitle(title)
         self.TitleLabel.Text = self.Title
     elseif self.Object and self.Object:IsA("TextButton") then
         self.Object.Text = self.Title
+    end
+    self.SearchText = normalizeSearchText(table.concat({
+        self.Title or "",
+        self.Type or "",
+        self.Section and self.Section.Title or "",
+        self.Tab and self.Tab.Title or "",
+    }, " "))
+    if self.Object then
+        self.Object:SetAttribute("VanillaUISearchText", self.SearchText)
+    end
+    if self.Window and type(self.Window._refreshSearchResults) == "function" then
+        task.defer(self.Window._refreshSearchResults)
     end
     return self
 end
@@ -278,19 +356,30 @@ local function registerElement(section, element, searchableObject)
     local window = section.Window
     element.Window = window
     element.Section = section
+    element.Tab = section.Tab
     element.Object = element.Object or searchableObject
     element.Title = element.Title or ""
     element.Visible = true
+    element.SearchText = normalizeSearchText(table.concat({
+        element.Title or "",
+        element.Type or "",
+        section.Title or "",
+        section.Tab and section.Tab.Title or "",
+    }, " "))
     window._elements[element] = true
 
     if searchableObject then
-        searchableObject:SetAttribute("VanillaUISearchText", string.lower(element.Title))
+        searchableObject:SetAttribute("VanillaUISearchText", element.SearchText)
     end
 
     if element.Flag then
         window._flagElements[element.Flag] = element
         window.Flags[element.Flag] = element.Value
         VanillaUI.Flags[element.Flag] = element.Value
+    end
+
+    if type(window._refreshSearchResults) == "function" then
+        task.defer(window._refreshSearchResults)
     end
 
     return element
@@ -1010,6 +1099,54 @@ function WindowMethods:_nextTabOrder()
     return self._tabOrder
 end
 
+function WindowMethods:_refreshTabPage()
+    local hasSecondaryTabs = #self.Tabs > PRIMARY_TAB_LIMIT
+    self.TabPage = hasSecondaryTabs and math.clamp(self.TabPage or 1, 1, 2) or 1
+
+    if self.LegalPlusButton then
+        self.LegalPlusButton.Visible = hasSecondaryTabs
+    end
+
+    for index, tab in ipairs(self.Tabs) do
+        local visible
+        if not hasSecondaryTabs or self.TabPage == 1 then
+            visible = index <= PRIMARY_TAB_LIMIT
+        else
+            visible = index > PRIMARY_TAB_LIMIT
+        end
+        tab.Object.Visible = visible
+    end
+
+    if self.TabHolder then
+        self.TabHolder.CanvasPosition = Vector2.new(0, 0)
+    end
+
+    if type(self._refreshLegalPlusButton) == "function" then
+        self._refreshLegalPlusButton(false)
+    end
+end
+
+function WindowMethods:_showTab(tab)
+    if not tab then
+        return
+    end
+
+    local index = tab.Index
+    if not index then
+        for tabIndex, currentTab in ipairs(self.Tabs) do
+            if currentTab == tab then
+                index = tabIndex
+                break
+            end
+        end
+    end
+
+    if index and #self.Tabs > PRIMARY_TAB_LIMIT then
+        self.TabPage = index <= PRIMARY_TAB_LIMIT and 1 or 2
+        self:_refreshTabPage()
+    end
+end
+
 function WindowMethods:_scheduleSave()
     if not self.ConfigurationSaving.Enabled or self._loadingConfiguration then
         return
@@ -1167,6 +1304,8 @@ function WindowMethods:CreateTab(options, icon)
     }, TabMethods)
 
     self.Tabs[#self.Tabs + 1] = tab
+    tab.Index = #self.Tabs
+    self:_refreshTabPage()
     return tab
 end
 
@@ -1192,6 +1331,9 @@ end
 function WindowMethods:SetMenuVisibility(visible)
     self.MenuVisible = visible ~= false
     self.MainContainer.Visible = self.MenuVisible
+    if type(self._refreshMenuButton) == "function" then
+        self._refreshMenuButton(false)
+    end
     return self
 end
 
@@ -1206,17 +1348,23 @@ function WindowMethods:Notify(options)
     options = type(options) == "table" and options or {Content = tostring(options)}
     local title = options.Title or "VanillaUI"
     local content = options.Content or options.Description or ""
-    local duration = tonumber(options.Duration) or 4
+    local duration = math.max(0.5, tonumber(options.Duration) or 4) + NOTIFICATION_EXTRA_DURATION
 
     local notification = create("Frame", {
         Name = "Notification",
-        Size = UDim2.fromOffset(280, 0),
+        Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = STYLE.Acrylic,
+        BackgroundTransparency = 1,
         LayoutOrder = self._notificationOrder,
+        ZIndex = 201,
     }, self.NotificationHolder)
     self._notificationOrder = self._notificationOrder + 1
     styleSurface(notification, THEME.Background, STYLE.MainCorner)
+
+    local stroke = notification:FindFirstChildOfClass("UIStroke")
+    if stroke then
+        stroke.Transparency = 1
+    end
 
     create("UIPadding", {
         PaddingTop = UDim.new(0, 10),
@@ -1225,24 +1373,26 @@ function WindowMethods:Notify(options)
         PaddingRight = UDim.new(0, 12),
     }, notification)
 
-    local layout = create("UIListLayout", {
+    create("UIListLayout", {
         Padding = UDim.new(0, 4),
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, notification)
 
-    create("TextLabel", {
+    local titleLabel = create("TextLabel", {
         Name = "Title",
         Size = UDim2.new(1, 0, 0, 17),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = title,
         TextColor3 = THEME.Text,
+        TextTransparency = 1,
         TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         LayoutOrder = 1,
+        ZIndex = 202,
     }, notification)
 
-    create("TextLabel", {
+    local contentLabel = create("TextLabel", {
         Name = "Content",
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
@@ -1250,34 +1400,40 @@ function WindowMethods:Notify(options)
         Font = Enum.Font.Gotham,
         Text = content,
         TextColor3 = THEME.SubText,
+        TextTransparency = 1,
         TextSize = 10,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
         LayoutOrder = 2,
+        ZIndex = 202,
     }, notification)
 
-    notification.Position = UDim2.fromOffset(18, 0)
-    notification.BackgroundTransparency = 1
     task.defer(function()
-        if notification.Parent then
-            tween(notification, {
-                Position = UDim2.fromOffset(0, 0),
-                BackgroundTransparency = STYLE.Acrylic,
-            })
+        if not notification.Parent then
+            return
+        end
+        tween(notification, {BackgroundTransparency = STYLE.Acrylic})
+        tween(titleLabel, {TextTransparency = 0})
+        tween(contentLabel, {TextTransparency = 0})
+        if stroke then
+            tween(stroke, {Transparency = STYLE.Stroke})
         end
     end)
 
     task.delay(duration, function()
-        if notification.Parent then
-            tween(notification, {
-                Position = UDim2.fromOffset(18, 0),
-                BackgroundTransparency = 1,
-            })
-            task.delay(0.18, function()
-                destroy(notification)
-            end)
+        if not notification.Parent then
+            return
         end
+        tween(notification, {BackgroundTransparency = 1})
+        tween(titleLabel, {TextTransparency = 1})
+        tween(contentLabel, {TextTransparency = 1})
+        if stroke then
+            tween(stroke, {Transparency = 1})
+        end
+        task.delay(0.20, function()
+            destroy(notification)
+        end)
     end)
 
     return notification
@@ -1335,39 +1491,68 @@ local function createFloatingPanel(window, name, title, size)
     local panel = create("Frame", {
         Name = name,
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 52),
+        Position = UDim2.new(0.5, 0, 0, 8 + FLOATING_PANEL_OFFSET),
         Size = size or UDim2.fromOffset(360, 180),
         Visible = false,
+        Active = true,
         ZIndex = 80,
+        BackgroundTransparency = 0.04,
     }, window.ScreenGui)
     styleSurface(panel, THEME.Background, STYLE.MainCorner)
+    panel.BackgroundTransparency = 0.04
+
+    local header = create("Frame", {
+        Name = "TitleBar",
+        Size = UDim2.new(1, 0, 0, 44),
+        BackgroundColor3 = THEME.ButtonAlt,
+        BackgroundTransparency = 0.08,
+        BorderSizePixel = 0,
+        ZIndex = 81,
+    }, panel)
+    addCorner(header, STYLE.MainCorner)
 
     create("TextLabel", {
         Name = "Title",
-        Position = UDim2.fromOffset(12, 8),
-        Size = UDim2.new(1, -50, 0, 24),
+        Position = UDim2.fromOffset(14, 0),
+        Size = UDim2.new(1, -60, 1, 0),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = title,
-        TextColor3 = THEME.Text,
-        TextSize = 13,
+        TextColor3 = THEME.CategoryTitle,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 81,
-    }, panel)
+        ZIndex = 82,
+    }, header)
 
     local close = create("TextButton", {
         Name = "Close",
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -8, 0, 8),
-        Size = UDim2.fromOffset(28, 24),
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -10, 0.5, 0),
+        Size = UDim2.fromOffset(28, 26),
         Text = "×",
+        Font = Enum.Font.GothamMedium,
+        TextSize = 16,
+        ZIndex = 82,
+    }, header)
+    styleButton(window, close)
+    close.Font = Enum.Font.GothamMedium
+    close.TextSize = 16
+
+    create("Frame", {
+        Name = "HeaderDivider",
+        Position = UDim2.new(0, 12, 0, 44),
+        Size = UDim2.new(1, -24, 0, 1),
+        BackgroundColor3 = THEME.Border,
+        BackgroundTransparency = 0.2,
+        BorderSizePixel = 0,
         ZIndex = 81,
     }, panel)
-    styleButton(window, close)
+
     registerConnection(window, close.MouseButton1Click:Connect(function()
         panel.Visible = false
     end))
 
+    panel:SetAttribute("VanillaUIPanelOffset", FLOATING_PANEL_OFFSET)
     return panel
 end
 
@@ -1387,6 +1572,7 @@ function VanillaUI:CreateWindow(options)
         MenuVisible = options.MenuVisible ~= false,
         Destroyed = false,
         Tabs = {},
+        TabPage = 1,
         Flags = {},
         _connections = {},
         _cleanupCallbacks = {},
@@ -1437,13 +1623,17 @@ function VanillaUI:CreateWindow(options)
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, mainBar)
 
-    local brandButton = create("TextButton", {
-        Name = "BrandButton",
+    local legalPlusButton = create("TextButton", {
+        Name = "LegalPlusButton",
         Size = UDim2.fromOffset(40, 40),
         LayoutOrder = 1,
-        Text = "[V]",
+        Text = "[L+]",
+        Visible = false,
     }, mainBar)
-    styleButton(window, brandButton)
+    window.LegalPlusButton = legalPlusButton
+    window._refreshLegalPlusButton = styleButton(window, legalPlusButton, function()
+        return window.TabPage == 2
+    end)
 
     local menuButton = create("TextButton", {
         Name = "MenuButton",
@@ -1451,7 +1641,7 @@ function VanillaUI:CreateWindow(options)
         LayoutOrder = 2,
         Text = options.MenuText or "MENÚ",
     }, mainBar)
-    styleButton(window, menuButton, function()
+    window._refreshMenuButton = styleButton(window, menuButton, function()
         return window.MenuVisible
     end)
 
@@ -1502,6 +1692,8 @@ function VanillaUI:CreateWindow(options)
         TextSize = 17,
     }, mainBar)
     styleButton(window, settingsButton)
+    settingsButton.Font = Enum.Font.GothamMedium
+    settingsButton.TextSize = 17
 
     local helpButton = create("TextButton", {
         Name = "HelpButton",
@@ -1522,7 +1714,7 @@ function VanillaUI:CreateWindow(options)
     }, screenGui)
     window.MainContainer = mainContainer
 
-    local sizeConstraint = create("UISizeConstraint", {
+    create("UISizeConstraint", {
         MinSize = options.MinSize or Vector2.new(320, 260),
         MaxSize = options.MaxSize or Vector2.new(1200, 700),
     }, mainContainer)
@@ -1559,9 +1751,9 @@ function VanillaUI:CreateWindow(options)
 
     local notificationHolder = create("Frame", {
         Name = "Notifications",
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -14, 0, 14),
-        Size = UDim2.fromOffset(280, 500),
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -14, 1, -14),
+        Size = UDim2.fromOffset(300, 540),
         BackgroundTransparency = 1,
         ZIndex = 200,
     }, screenGui)
@@ -1571,72 +1763,169 @@ function VanillaUI:CreateWindow(options)
         Padding = UDim.new(0, 8),
         SortOrder = Enum.SortOrder.LayoutOrder,
         HorizontalAlignment = Enum.HorizontalAlignment.Right,
-        VerticalAlignment = Enum.VerticalAlignment.Top,
+        VerticalAlignment = Enum.VerticalAlignment.Bottom,
     }, notificationHolder)
 
-    local searchPanel = createFloatingPanel(window, "SearchPanel", "BUSCAR CONTROLES", UDim2.fromOffset(380, 94))
+    local searchPanel = createFloatingPanel(window, "SearchPanel", "BUSCAR CONTROLES", UDim2.fromOffset(390, 360))
     local searchBox = create("TextBox", {
         Name = "SearchBox",
-        Position = UDim2.fromOffset(12, 43),
-        Size = UDim2.new(1, -24, 0, 36),
+        Position = UDim2.fromOffset(12, 56),
+        Size = UDim2.new(1, -24, 0, 34),
         ClearTextOnFocus = false,
-        PlaceholderText = "Buscar ESP, FOV, configuración...",
+        PlaceholderText = "Buscar FOV, ESP, ajustes...",
         Text = "",
         Font = Enum.Font.Gotham,
-        TextSize = 12,
+        TextSize = 11,
         TextColor3 = THEME.Text,
         PlaceholderColor3 = THEME.SubText,
         TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 81,
     }, searchPanel)
     styleSurface(searchBox, THEME.Button)
-    create("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, searchBox)
+    create("UIPadding", {
+        PaddingLeft = UDim.new(0, 11),
+        PaddingRight = UDim.new(0, 11),
+    }, searchBox)
 
-    local infoPanel = createFloatingPanel(window, "InfoPanel", "VANILLAUI", UDim2.fromOffset(390, 190))
-    create("TextLabel", {
-        Name = "Info",
-        Position = UDim2.fromOffset(12, 43),
-        Size = UDim2.new(1, -24, 1, -55),
+    local searchResults = create("ScrollingFrame", {
+        Name = "Results",
+        Position = UDim2.fromOffset(12, 101),
+        Size = UDim2.new(1, -24, 1, -113),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(),
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = THEME.Accent,
+        ScrollBarImageTransparency = 0.45,
+        ZIndex = 81,
+    }, searchPanel)
+    create("UIListLayout", {
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, searchResults)
+
+    local searchHint = create("TextLabel", {
+        Name = "SearchHint",
+        Size = UDim2.new(1, 0, 0, 42),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
-        Text = window.Title .. "\n" .. window.Subtitle .. "\n\nVanillaUI " .. VanillaUI.Version .. "\nInterfaz adaptable basada en V+ Sentinel.",
+        Text = "Escribe el nombre de una función o ajuste.",
+        TextColor3 = THEME.SubText,
+        TextSize = 10,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        LayoutOrder = 1,
+        ZIndex = 82,
+    }, searchResults)
+
+    local infoPanel = createFloatingPanel(window, "InfoPanel", "VANILLAUI", UDim2.fromOffset(390, 210))
+    create("TextLabel", {
+        Name = "Info",
+        Position = UDim2.fromOffset(14, 58),
+        Size = UDim2.new(1, -28, 1, -72),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        Text = window.Title .. "\n" .. window.Subtitle .. "\n\nVanillaUI " .. VanillaUI.Version .. "\nEntorno privado de Vanilla Lattice.\nDiscord: " .. DISCORD_INVITE,
         TextColor3 = THEME.SubText,
         TextSize = 11,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
+        LineHeight = 1.08,
         ZIndex = 81,
     }, infoPanel)
 
-    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "AJUSTES DE VANILLAUI", UDim2.fromOffset(390, 174))
-    local settingsText = create("TextLabel", {
+    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "AJUSTES DE VANILLAUI", UDim2.fromOffset(390, 224))
+    create("TextLabel", {
         Name = "SettingsInfo",
-        Position = UDim2.fromOffset(12, 42),
-        Size = UDim2.new(1, -24, 0, 44),
+        Position = UDim2.fromOffset(14, 56),
+        Size = UDim2.new(1, -28, 0, 18),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = "ESCALA DE INTERFAZ",
         TextColor3 = THEME.SubText,
-        TextSize = 11,
+        TextSize = 10,
         TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 81,
     }, settingsPanel)
 
     local scaleHolder = create("Frame", {
-        Position = UDim2.fromOffset(12, 84),
-        Size = UDim2.new(1, -24, 0, 34),
+        Position = UDim2.fromOffset(14, 82),
+        Size = UDim2.new(1, -28, 0, 32),
         BackgroundTransparency = 1,
         ZIndex = 81,
     }, settingsPanel)
-    create("UIListLayout", {
+    create("UIGridLayout", {
+        CellPadding = UDim2.fromOffset(6, 0),
+        CellSize = UDim2.new(0.25, -5, 1, 0),
         FillDirection = Enum.FillDirection.Horizontal,
-        Padding = UDim.new(0, 6),
+        FillDirectionMaxCells = 4,
         HorizontalAlignment = Enum.HorizontalAlignment.Center,
         VerticalAlignment = Enum.VerticalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
     }, scaleHolder)
+
+    create("Frame", {
+        Position = UDim2.fromOffset(14, 128),
+        Size = UDim2.new(1, -28, 0, 1),
+        BackgroundColor3 = THEME.Border,
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        ZIndex = 81,
+    }, settingsPanel)
+
+    local discordButton = create("TextButton", {
+        Name = "DiscordButton",
+        Position = UDim2.fromOffset(14, 143),
+        Size = UDim2.new(1, -28, 0, 32),
+        Text = "DISCORD · COPIAR INVITACIÓN",
+        Font = Enum.Font.GothamMedium,
+        TextSize = 11,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        AutoButtonColor = false,
+        ZIndex = 82,
+    }, settingsPanel)
+    styleSurface(discordButton, DISCORD_BLURPLE)
+    discordButton.BackgroundColor3 = DISCORD_BLURPLE
+    discordButton.BackgroundTransparency = 0.02
+
+    registerConnection(window, discordButton.MouseEnter:Connect(function()
+        tween(discordButton, {BackgroundColor3 = DISCORD_BLURPLE_HOVER})
+    end))
+    registerConnection(window, discordButton.MouseLeave:Connect(function()
+        tween(discordButton, {BackgroundColor3 = DISCORD_BLURPLE})
+    end))
+    registerConnection(window, discordButton.MouseButton1Click:Connect(function()
+        local copied = false
+        for _, functionName in ipairs({"setclipboard", "toclipboard"}) do
+            local clipboardFunction = GLOBAL_ENV[functionName] or _G[functionName]
+            if type(clipboardFunction) == "function" then
+                local ok = pcall(clipboardFunction, DISCORD_INVITE)
+                if ok then
+                    copied = true
+                    break
+                end
+            end
+        end
+
+        window:Notify({
+            Title = "Discord",
+            Content = copied and "Invitación copiada al portapapeles." or DISCORD_INVITE,
+            Duration = 3,
+        })
+    end))
 
     local scaleValue = 1
     local scaleObjects = {}
+    local scaleButtonEntries = {}
+    local function refreshScaleButtons()
+        for _, entry in ipairs(scaleButtonEntries) do
+            entry.Refresh(false)
+        end
+    end
+
     local function attachScale(target)
         local scaleObject = create("UIScale", {Scale = scaleValue}, target)
         scaleObjects[#scaleObjects + 1] = scaleObject
@@ -1664,37 +1953,46 @@ function VanillaUI:CreateWindow(options)
                     scaleObject.Scale = scaleValue
                 end
             end
+            refreshScaleButtons()
         end,
     })
     window.UIScale = uiScale
 
     for index, scale in ipairs({0.8, 0.9, 1.0, 1.1}) do
+        local targetScale = scale
         local scaleButton = create("TextButton", {
-            Size = UDim2.fromOffset(78, 30),
+            Size = UDim2.fromScale(1, 1),
             LayoutOrder = index,
-            Text = tostring(math.floor(scale * 100)) .. "%",
+            Text = tostring(math.floor(targetScale * 100)) .. "%",
             ZIndex = 82,
         }, scaleHolder)
-        styleButton(window, scaleButton, function()
-            return math.abs(uiScale.Scale - scale) < 0.01
+        local refresh = styleButton(window, scaleButton, function()
+            return math.abs(uiScale.Scale - targetScale) < 0.01
         end)
+        scaleButtonEntries[#scaleButtonEntries + 1] = {
+            Button = scaleButton,
+            Refresh = refresh,
+            Scale = targetScale,
+        }
         registerConnection(window, scaleButton.MouseButton1Click:Connect(function()
-            uiScale.Scale = scale
+            uiScale.Scale = targetScale
         end))
     end
+    refreshScaleButtons()
 
-    local helpPanel = createFloatingPanel(window, "HelpPanel", "AYUDA", UDim2.fromOffset(430, 245))
+    local helpPanel = createFloatingPanel(window, "HelpPanel", "AYUDA", UDim2.fromOffset(430, 270))
     attachScale(helpPanel)
     create("TextLabel", {
         Name = "Help",
-        Position = UDim2.fromOffset(12, 43),
-        Size = UDim2.new(1, -24, 1, -55),
+        Position = UDim2.fromOffset(14, 58),
+        Size = UDim2.new(1, -28, 1, -72),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = table.concat({
             "SUPR: mostrar u ocultar VanillaUI.",
             "MENÚ: mostrar u ocultar las categorías.",
-            "La lupa filtra controles por nombre.",
+            "La lupa busca controles y permite saltar hasta ellos.",
+            "[L+]: aparece con más de 5 categorías y cambia de grupo.",
             "La barra superior puede arrastrarse.",
             "",
             "API: CreateWindow, CreateTab, CreateSection,",
@@ -1706,11 +2004,14 @@ function VanillaUI:CreateWindow(options)
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
+        LineHeight = 1.08,
         ZIndex = 81,
     }, helpPanel)
 
+    local floatingPanels = {searchPanel, infoPanel, settingsPanel, helpPanel}
+
     local function hideFloatingPanels(except)
-        for _, panel in ipairs({searchPanel, infoPanel, settingsPanel, helpPanel}) do
+        for _, panel in ipairs(floatingPanels) do
             if panel ~= except then
                 panel.Visible = false
             end
@@ -1723,12 +2024,216 @@ function VanillaUI:CreateWindow(options)
         panel.Visible = newState
     end
 
+    local searchConnections = {}
+    local function clearSearchConnections()
+        for _, connection in ipairs(searchConnections) do
+            disconnect(connection)
+        end
+        table.clear(searchConnections)
+    end
+
+    local function clearSearchResults()
+        clearSearchConnections()
+        for _, child in ipairs(searchResults:GetChildren()) do
+            if child:GetAttribute("SearchGenerated") == true then
+                child:Destroy()
+            end
+        end
+    end
+
+    local function pulseSearchTarget(element)
+        local object = element.Button or element.Object
+        if not object or not object.Parent or not object:IsA("GuiObject") then
+            return
+        end
+
+        local originalColor = object.BackgroundColor3
+        local originalTransparency = object.BackgroundTransparency
+        local originalTextColor = object:IsA("TextButton") and object.TextColor3 or nil
+        tween(object, {
+            BackgroundColor3 = THEME.Accent,
+            BackgroundTransparency = STYLE.AcrylicActive,
+        })
+        if originalTextColor then
+            tween(object, {TextColor3 = Color3.fromRGB(20, 19, 17)})
+        end
+
+        task.delay(0.38, function()
+            if not object.Parent then
+                return
+            end
+            tween(object, {
+                BackgroundColor3 = originalColor,
+                BackgroundTransparency = originalTransparency,
+            })
+            if originalTextColor then
+                tween(object, {TextColor3 = originalTextColor})
+            end
+            if type(element.Refresh) == "function" then
+                task.defer(function()
+                    if element.Object and element.Object.Parent then
+                        element:Refresh()
+                    end
+                end)
+            end
+        end)
+    end
+
+    local function focusSearchTarget(element)
+        if not element or not element.Object or not element.Object.Parent then
+            return
+        end
+
+        searchPanel.Visible = false
+        searchBox:ReleaseFocus()
+        window:SetMenuVisibility(true)
+        window:_showTab(element.Tab)
+
+        task.defer(function()
+            task.wait()
+            local tab = element.Tab
+            if tab and tab.Object and tab.Object.Parent then
+                local y = element.Object.AbsolutePosition.Y - tab.Object.AbsolutePosition.Y + tab.Object.CanvasPosition.Y - 40
+                local maxY = math.max(0, tab.Object.AbsoluteCanvasSize.Y - tab.Object.AbsoluteSize.Y)
+                tab.Object.CanvasPosition = Vector2.new(0, math.clamp(y, 0, maxY))
+            end
+            pulseSearchTarget(element)
+        end)
+    end
+
+    local function createSearchSectionLabel(text, order)
+        local label = create("TextLabel", {
+            Name = "SearchSection",
+            Size = UDim2.new(1, -2, 0, 20),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            Text = string.upper(text),
+            TextColor3 = THEME.Accent,
+            TextSize = 9,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            LayoutOrder = order,
+            ZIndex = 82,
+        }, searchResults)
+        label:SetAttribute("SearchGenerated", true)
+    end
+
+    local function createSearchResultButton(element, order)
+        local resultButton = create("TextButton", {
+            Name = "SearchResult",
+            Size = UDim2.new(1, -2, 0, 32),
+            BackgroundColor3 = THEME.Button,
+            BackgroundTransparency = STYLE.Acrylic,
+            BorderSizePixel = 0,
+            Font = Enum.Font.Gotham,
+            Text = element.Title,
+            TextColor3 = THEME.Text,
+            TextSize = 10,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            AutoButtonColor = false,
+            LayoutOrder = order,
+            ZIndex = 82,
+        }, searchResults)
+        resultButton:SetAttribute("SearchGenerated", true)
+        addCorner(resultButton, STYLE.Corner)
+        local stroke = addStroke(resultButton, THEME.Border, STYLE.Stroke)
+        create("UIPadding", {
+            PaddingLeft = UDim.new(0, 10),
+            PaddingRight = UDim.new(0, 10),
+        }, resultButton)
+
+        searchConnections[#searchConnections + 1] = resultButton.MouseEnter:Connect(function()
+            tween(resultButton, {
+                BackgroundColor3 = THEME.Hover,
+                BackgroundTransparency = STYLE.AcrylicHover,
+                TextColor3 = THEME.SubText,
+            })
+            tween(stroke, {Transparency = STYLE.StrokeHover})
+        end)
+        searchConnections[#searchConnections + 1] = resultButton.MouseLeave:Connect(function()
+            tween(resultButton, {
+                BackgroundColor3 = THEME.Button,
+                BackgroundTransparency = STYLE.Acrylic,
+                TextColor3 = THEME.Text,
+            })
+            tween(stroke, {Transparency = STYLE.Stroke})
+        end)
+        searchConnections[#searchConnections + 1] = resultButton.MouseButton1Click:Connect(function()
+            focusSearchTarget(element)
+        end)
+    end
+
+    local function refreshSearchResults()
+        if window.Destroyed or not searchResults.Parent then
+            return
+        end
+
+        clearSearchResults()
+        local terms = expandSearchTerms(searchBox.Text)
+        if #terms == 0 then
+            searchHint.Visible = true
+            searchHint.Text = "Escribe el nombre de una función o ajuste."
+            return
+        end
+
+        local matches = {}
+        for element in pairs(window._elements) do
+            if element.Object and element.Object.Parent and element.Type ~= "Divider" then
+                local blob = element.SearchText or normalizeSearchText(element.Title)
+                if searchTextMatches(blob, terms) then
+                    matches[#matches + 1] = element
+                end
+            end
+        end
+
+        table.sort(matches, function(a, b)
+            local aTab = normalizeSearchText(a.Tab and a.Tab.Title or "")
+            local bTab = normalizeSearchText(b.Tab and b.Tab.Title or "")
+            if aTab == bTab then
+                return normalizeSearchText(a.Title) < normalizeSearchText(b.Title)
+            end
+            return aTab < bTab
+        end)
+
+        searchHint.Visible = #matches == 0
+        searchHint.Text = "No se encontraron controles."
+
+        local currentTab
+        local visualOrder = 1
+        for index, element in ipairs(matches) do
+            if index > 50 then
+                break
+            end
+            local tabTitle = element.Tab and element.Tab.Title or "VANILLAUI"
+            if tabTitle ~= currentTab then
+                currentTab = tabTitle
+                visualOrder = visualOrder + 1
+                createSearchSectionLabel(currentTab, visualOrder)
+            end
+            visualOrder = visualOrder + 1
+            createSearchResultButton(element, visualOrder)
+        end
+    end
+    window._refreshSearchResults = refreshSearchResults
+    window.SearchPanel = searchPanel
+    window.SearchInput = searchBox
+    window.SearchResults = searchResults
+
+    registerConnection(window, legalPlusButton.MouseButton1Click:Connect(function()
+        if #window.Tabs <= PRIMARY_TAB_LIMIT then
+            return
+        end
+        window.TabPage = window.TabPage == 1 and 2 or 1
+        window:_refreshTabPage()
+    end))
+
     registerConnection(window, menuButton.MouseButton1Click:Connect(function()
         window:SetMenuVisibility(not window.MenuVisible)
     end))
     registerConnection(window, searchButton.MouseButton1Click:Connect(function()
         togglePanel(searchPanel)
         if searchPanel.Visible then
+            refreshSearchResults()
             searchBox:CaptureFocus()
         end
     end))
@@ -1741,20 +2246,7 @@ function VanillaUI:CreateWindow(options)
     registerConnection(window, helpButton.MouseButton1Click:Connect(function()
         togglePanel(helpPanel)
     end))
-    registerConnection(window, brandButton.MouseButton1Click:Connect(function()
-        window:Notify({Title = "VanillaUI", Content = window.Title .. " · " .. window.Subtitle, Duration = 3})
-    end))
-
-    registerConnection(window, searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        local query = string.lower(searchBox.Text)
-        for element in pairs(window._elements) do
-            if element.Object and element.Object.Parent then
-                local title = string.lower(element.Title or "")
-                local matches = query == "" or string.find(title, query, 1, true) ~= nil
-                element.Object.Visible = element.Visible ~= false and matches
-            end
-        end
-    end))
+    registerConnection(window, searchBox:GetPropertyChangedSignal("Text"):Connect(refreshSearchResults))
 
     local dragging = false
     local dragStart
@@ -1774,10 +2266,25 @@ function VanillaUI:CreateWindow(options)
         end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             local delta = input.Position - dragStart
-            mainBar.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
-            mainContainer.Position = UDim2.new(mainBar.Position.X.Scale, mainBar.Position.X.Offset, mainBar.Position.Y.Scale, mainBar.Position.Y.Offset + 50)
-            for _, panel in ipairs({searchPanel, infoPanel, settingsPanel, helpPanel}) do
-                panel.Position = UDim2.new(mainBar.Position.X.Scale, mainBar.Position.X.Offset, mainBar.Position.Y.Scale, mainBar.Position.Y.Offset + 44)
+            mainBar.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+            mainContainer.Position = UDim2.new(
+                mainBar.Position.X.Scale,
+                mainBar.Position.X.Offset,
+                mainBar.Position.Y.Scale,
+                mainBar.Position.Y.Offset + 50
+            )
+            for _, panel in ipairs(floatingPanels) do
+                panel.Position = UDim2.new(
+                    mainBar.Position.X.Scale,
+                    mainBar.Position.X.Offset,
+                    mainBar.Position.Y.Scale,
+                    mainBar.Position.Y.Offset + FLOATING_PANEL_OFFSET
+                )
             end
         end
     end))
@@ -1808,7 +2315,7 @@ function VanillaUI:CreateWindow(options)
         mainContainer.Size = UDim2.fromOffset(width, height)
 
         if viewport.X < 560 then
-            uiScale.Scale = math.min(uiScale.Scale, 0.82)
+            uiScale.Scale = math.min(uiScale.Scale, 0.8)
         end
     end
 
@@ -1825,6 +2332,7 @@ function VanillaUI:CreateWindow(options)
         window:Destroy()
     end
     GLOBAL_ENV[CLEANUP_KEY] = window._cleanupFunction
+    window:_refreshTabPage()
 
     return window
 end
@@ -1851,5 +2359,6 @@ end
 
 VanillaUI.Theme = THEME
 VanillaUI.Window = WindowMethods
+VanillaUI.DiscordInvite = DISCORD_INVITE
 
 return VanillaUI

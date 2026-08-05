@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.7.2
+    VanillaUI v0.7.3
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.7.2",
+    Version = "0.7.3",
     Flags = {},
 }
 
@@ -30,8 +30,8 @@ local FLOATING_PANEL_OFFSET = 60
 local TOP_SAFE_OFFSET = 48
 local NOTIFICATION_EXTRA_DURATION = 2
 local SEARCH_DEBOUNCE = 0.06
-local DEFAULT_TEXT_SIZE = 15
-local DEFAULT_DESCRIPTION_SIZE = 12
+local DEFAULT_TEXT_SIZE = 16
+local DEFAULT_DESCRIPTION_SIZE = 13
 local DEFAULT_NOTIFICATION_WIDTH = 340
 local DEFAULT_RESPONSIVE_RULES = {
     Wide = 1100,
@@ -75,6 +75,8 @@ local THEME = {
     SubText = Color3.fromRGB(195, 185, 165),
     Disabled = Color3.fromRGB(72, 24, 32),
     DisabledText = Color3.fromRGB(226, 194, 198),
+    ActiveText = Color3.fromRGB(22, 20, 17),
+    ActiveSubText = Color3.fromRGB(72, 64, 52),
 }
 
 local BUILTIN_TRANSLATIONS = {
@@ -270,7 +272,7 @@ local STYLE = {
     StrokeActive = 0.10,
     Tween = TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
     TweenFast = TweenInfo.new(0.10, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-    TweenPanel = TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    TweenPanel = TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
 local GLOBAL_ENV = _G
@@ -1368,18 +1370,22 @@ end
 local function styleButton(window, button, isActiveProvider)
     button.AutoButtonColor = false
     button.Font = Enum.Font.Gotham
-    button.TextSize = 13
+    button.TextSize = 14
     button.TextWrapped = true
     button.TextScaled = false
     button.TextColor3 = THEME.Text
     styleSurface(button, THEME.Button)
 
     local stroke = button:FindFirstChildOfClass("UIStroke")
+    local hovered = false
 
-    local function refresh(hovered)
+    local function refresh(forcedHovered)
+        if forcedHovered ~= nil then
+            hovered = forcedHovered == true
+        end
         local active = type(isActiveProvider) == "function" and isActiveProvider() == true
         local background = active and THEME.Accent or (hovered and THEME.Hover or THEME.Button)
-        local textColor = active and Color3.fromRGB(20, 19, 17) or (hovered and THEME.SubText or THEME.Text)
+        local textColor = active and THEME.ActiveText or (hovered and THEME.CategoryTitle or THEME.Text)
         local transparency = active and STYLE.AcrylicActive or (hovered and STYLE.AcrylicHover or STYLE.Acrylic)
         local strokeTransparency = active and STYLE.StrokeActive or (hovered and STYLE.StrokeHover or STYLE.Stroke)
 
@@ -1394,6 +1400,22 @@ local function styleButton(window, button, isActiveProvider)
                 Transparency = strokeTransparency,
                 Thickness = hovered and 1.25 or 1,
             })
+        end
+
+        local contentColor = active and THEME.ActiveText or (hovered and THEME.CategoryTitle or THEME.Text)
+        local searchRing = button:FindFirstChild("SearchIconRing")
+        local searchHandle = button:FindFirstChild("SearchIconHandle")
+        if searchRing then
+            local ringStroke = searchRing:FindFirstChildOfClass("UIStroke")
+            if ringStroke then tween(ringStroke, {Color = contentColor}) end
+        end
+        if searchHandle then tween(searchHandle, {BackgroundColor3 = contentColor}) end
+
+        local infoIcon = button:FindFirstChild("InfoIcon")
+        if infoIcon then
+            tween(infoIcon, {BackgroundColor3 = active and THEME.ActiveText or THEME.Accent})
+            local iconText = infoIcon:FindFirstChild("IconText")
+            if iconText then tween(iconText, {TextColor3 = active and THEME.Accent or THEME.ActiveText}) end
         end
     end
 
@@ -1493,6 +1515,16 @@ local function styleInteractiveSurface(window, object, interact, activeProvider,
     styleSurface(object, THEME.Button)
     local stroke = object:FindFirstChildOfClass("UIStroke")
     local hovered = false
+    local textStates = {}
+
+    for _, textObject in ipairs(textObjects or {}) do
+        if textObject then
+            textStates[textObject] = {
+                Normal = textObject.TextColor3,
+                Secondary = textObject.TextColor3 == THEME.SubText,
+            }
+        end
+    end
 
     local function refresh(forcedHovered)
         if forcedHovered ~= nil then
@@ -1501,14 +1533,23 @@ local function styleInteractiveSurface(window, object, interact, activeProvider,
         local active = type(activeProvider) == "function" and activeProvider() == true
         local locked = object:GetAttribute("VanillaUILocked") == true
         local background = locked and THEME.Disabled or (active and THEME.Accent or (hovered and THEME.Hover or THEME.Button))
-        local textColor = locked and THEME.DisabledText or (active and Color3.fromRGB(20, 19, 17) or (hovered and THEME.CategoryTitle or THEME.Text))
         local transparency = locked and 0.12 or (active and STYLE.AcrylicActive or (hovered and STYLE.AcrylicHover or STYLE.Acrylic))
         tween(object, {BackgroundColor3 = background, BackgroundTransparency = transparency})
         if stroke then
             tween(stroke, {Transparency = active and STYLE.StrokeActive or (hovered and STYLE.StrokeHover or STYLE.Stroke)})
         end
-        for _, textObject in ipairs(textObjects or {}) do
+        for textObject, state in pairs(textStates) do
             if textObject and textObject.Parent then
+                local textColor
+                if locked then
+                    textColor = THEME.DisabledText
+                elseif active then
+                    textColor = state.Secondary and THEME.ActiveSubText or THEME.ActiveText
+                elseif hovered then
+                    textColor = state.Secondary and THEME.SubText or THEME.CategoryTitle
+                else
+                    textColor = state.Normal
+                end
                 tween(textObject, {TextColor3 = textColor})
             end
         end
@@ -1986,12 +2027,23 @@ function SectionMethods:CreateDropdown(options)
         ZIndex = 4,
     }, button)
 
+    local contentGroup = create("CanvasGroup", {
+        Name = "DropdownContent",
+        Position = UDim2.fromOffset(0, headerHeight + 5),
+        Size = UDim2.new(1, 0, 0, 240),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        GroupTransparency = 1,
+        Visible = false,
+        ZIndex = 4,
+    }, root)
+
     local searchBox
     if searchable then
         searchBox = create("TextBox", {
             Name = "OptionSearch",
-            Position = UDim2.fromOffset(0, headerHeight + 5),
-            Size = UDim2.new(1, 0, 0, 30),
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.new(1, 0, 0, 32),
             ClearTextOnFocus = false,
             PlaceholderText = "Filter options...",
             Text = "",
@@ -2001,15 +2053,16 @@ function SectionMethods:CreateDropdown(options)
             PlaceholderColor3 = THEME.SubText,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 5,
-        }, root)
+        }, contentGroup)
         styleSurface(searchBox, THEME.ButtonAlt)
         create("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, searchBox)
     end
 
-    local choicesY = headerHeight + (searchable and 40 or 5)
+    local choicesLocalY = searchable and 37 or 0
+    local choicesY = headerHeight + 5 + choicesLocalY
     local choices = create("ScrollingFrame", {
         Name = "Choices",
-        Position = UDim2.fromOffset(0, choicesY),
+        Position = UDim2.fromOffset(0, choicesLocalY),
         Size = UDim2.new(1, 0, 0, 0),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
@@ -2019,7 +2072,7 @@ function SectionMethods:CreateDropdown(options)
         CanvasSize = UDim2.new(),
         Visible = false,
         ZIndex = 4,
-    }, root)
+    }, contentGroup)
     local choicesLayout = create("UIListLayout", {
         Padding = UDim.new(0, 4),
         SortOrder = Enum.SortOrder.LayoutOrder,
@@ -2038,6 +2091,7 @@ function SectionMethods:CreateDropdown(options)
         ValueLabel = valueLabel,
         Choices = choices,
         SearchBox = searchBox,
+        ContentGroup = contentGroup,
         Values = {},
         OptionButtons = {},
         Multiple = multiple,
@@ -2045,6 +2099,7 @@ function SectionMethods:CreateDropdown(options)
         HeaderHeight = headerHeight,
         ChoicesY = choicesY,
         Open = false,
+        Closing = false,
         Flag = option(options, {"flag", "Flag"}, nil),
         ForgetState = option(options, {"forgetState", "ForgetState"}, false) == true,
         value = {},
@@ -2053,8 +2108,8 @@ function SectionMethods:CreateDropdown(options)
     }, ElementMethods)
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
-        return element.Open
-    end, {titleLabel})
+        return element.Open or element.Closing
+    end, {titleLabel, descriptionLabel, valueLabel})
 
     function element:_selected(optionValue)
         return table.find(self.value, tostring(optionValue)) ~= nil
@@ -2120,54 +2175,68 @@ function SectionMethods:CreateDropdown(options)
 
     function element:SetOpen(open)
         local wasOpen = self.Open == true
-        self.Open = open == true
+        local requestedOpen = open == true
         local animationToken = (self.Object:GetAttribute("VanillaUIAnimationToken") or 0) + 1
         self.Object:SetAttribute("VanillaUIAnimationToken", animationToken)
-        if self.Open then
-            self.Choices.Visible = true
-            if self.SearchBox then
-                self.SearchBox.Visible = true
-            end
-        end
+
         local visibleCount = 0
         for _, entry in pairs(self.OptionButtons) do
             if entry.Button.Visible then
                 visibleCount = visibleCount + 1
             end
         end
-        local contentHeight = math.min(180, math.max(0, visibleCount * 30 + math.max(0, visibleCount - 1) * 4))
+        local contentHeight = math.min(196, math.max(0, visibleCount * 38 + math.max(0, visibleCount - 1) * 4))
         self.Choices.Size = UDim2.new(1, 0, 0, contentHeight)
-        local target = self.HeaderHeight
-        if self.Open then
-            target = self.ChoicesY + contentHeight
+        local target = requestedOpen and (self.ChoicesY + contentHeight) or self.HeaderHeight
+
+        if requestedOpen then
+            self.Open = true
+            self.Closing = false
+            self.Choices.Visible = true
+            if self.SearchBox then self.SearchBox.Visible = true end
+            if not self.ContentGroup.Visible then
+                self.ContentGroup.GroupTransparency = 1
+                self.ContentGroup.Visible = true
+            end
+            tween(self.Object, {Size = UDim2.new(1, 0, 0, target)})
+            TweenService:Create(self.ContentGroup, STYLE.Tween, {GroupTransparency = 0}):Play()
+            if not wasOpen then
+                self.Window:_playSound("Open")
+                self.Window:_beginFocus(self.Object, function()
+                    if self.Open or self.Closing then self:SetOpen(false) end
+                end, self.Title)
+            end
+            refreshStyle()
+            return self
         end
+
+        if not wasOpen and not self.Closing then
+            refreshStyle(false)
+            return self
+        end
+
+        self.Open = false
+        self.Closing = true
         tween(self.Object, {Size = UDim2.new(1, 0, 0, target)})
-        if not self.Open then
-            task.delay(STYLE.Tween.Time, function()
-                if self.Object and self.Object.Parent
-                    and self.Object:GetAttribute("VanillaUIAnimationToken") == animationToken
-                    and not self.Open then
-                    self.Choices.Visible = false
-                    if self.SearchBox then
-                        self.SearchBox.Visible = false
-                    end
-                end
-            end)
-        end
-        if self.Open and not wasOpen then
-            self.Window:_playSound("Open")
-            self.Window:_beginFocus(self.Object, function()
-                if self.Open then self:SetOpen(false) end
-            end, self.Title)
-        elseif not self.Open and wasOpen then
+        TweenService:Create(self.ContentGroup, STYLE.Tween, {GroupTransparency = 1}):Play()
+        if wasOpen then
             self.Window:_playSound("Close")
             self.Window:_endFocus(self.Object)
         end
-        if self.Open then
-            refreshStyle()
-        else
-            refreshStyle(false)
-        end
+        refreshStyle()
+
+        task.delay(STYLE.Tween.Time, function()
+            if self.Object and self.Object.Parent
+                and self.Object:GetAttribute("VanillaUIAnimationToken") == animationToken
+                and not self.Open then
+                self.ContentGroup.Visible = false
+                self.ContentGroup.GroupTransparency = 0
+                self.Choices.Visible = false
+                if self.SearchBox then self.SearchBox.Visible = false end
+                self.Closing = false
+                refreshStyle(false)
+            end
+        end)
         return self
     end
 
@@ -2567,18 +2636,29 @@ function SectionMethods:CreateColorPicker(options)
         ZIndex = 5,
     }, swatch)
 
-    local panel = create("Frame", {
+    local panel = create("CanvasGroup", {
         Name = "Panel",
         Position = UDim2.fromOffset(0, headerHeight + 5),
         Size = UDim2.new(1, 0, 0, panelHeight),
-        BackgroundColor3 = THEME.ButtonAlt,
-        BackgroundTransparency = STYLE.Acrylic,
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         Visible = false,
+        GroupTransparency = 1,
+        ClipsDescendants = true,
         ZIndex = 3,
     }, root)
     addCorner(panel, STYLE.Corner)
-    addStroke(panel, THEME.Border, STYLE.Stroke)
+    local panelSurface = create("Frame", {
+        Name = "PanelSurface",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = THEME.ButtonAlt,
+        BackgroundTransparency = STYLE.Acrylic,
+        BorderSizePixel = 0,
+        Active = false,
+        ZIndex = 3,
+    }, panel)
+    styleSurface(panelSurface, THEME.ButtonAlt, STYLE.Corner)
+    panelSurface.BackgroundTransparency = STYLE.Acrylic
 
     local hue, saturation, brightness = default:ToHSV()
     local element = setmetatable({
@@ -2600,6 +2680,7 @@ function SectionMethods:CreateColorPicker(options)
         DefaultValue = default,
         Callback = option(options, {"callback", "Callback"}, nil),
         Open = false,
+        Closing = false,
         Hue = hue,
         Saturation = saturation,
         Brightness = brightness,
@@ -2610,8 +2691,8 @@ function SectionMethods:CreateColorPicker(options)
     }, ElementMethods)
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
-        return element.Open
-    end, {titleLabel})
+        return element.Open or element.Closing
+    end, {titleLabel, descriptionLabel})
 
     local colorField = create("Frame", {
         Name = "SaturationValue",
@@ -3017,33 +3098,55 @@ function SectionMethods:CreateColorPicker(options)
 
     function element:SetOpen(open)
         local wasOpen = self.Open == true
-        self.Open = open == true
-        local targetHeight = self.Open and (headerHeight + panelHeight + 5) or headerHeight
-        if self.Open then
-            self.Panel.Visible = true
+        local requestedOpen = open == true
+        local animationToken = (self.Object:GetAttribute("VanillaUIAnimationToken") or 0) + 1
+        self.Object:SetAttribute("VanillaUIAnimationToken", animationToken)
+        local targetHeight = requestedOpen and (headerHeight + panelHeight + 5) or headerHeight
+
+        if requestedOpen then
+            self.Open = true
+            self.Closing = false
+            if not self.Panel.Visible then
+                self.Panel.GroupTransparency = 1
+                self.Panel.Visible = true
+            end
+            tween(self.Object, {Size = UDim2.new(1, 0, 0, targetHeight)})
+            TweenService:Create(self.Panel, STYLE.Tween, {GroupTransparency = 0}):Play()
+            if not wasOpen then
+                self.Window:_playSound("Open")
+                self.Window:_beginFocus(self.Object, function()
+                    if self.Open or self.Closing then self:SetOpen(false) end
+                end, self.Title)
+            end
+            refreshStyle()
+            return self
         end
+
+        if not wasOpen and not self.Closing then
+            refreshStyle(false)
+            return self
+        end
+
+        self.Open = false
+        self.Closing = true
         tween(self.Object, {Size = UDim2.new(1, 0, 0, targetHeight)})
-        if self.Open and not wasOpen then
-            self.Window:_playSound("Open")
-            self.Window:_beginFocus(self.Object, function()
-                if self.Open then self:SetOpen(false) end
-            end, self.Title)
-        elseif not self.Open and wasOpen then
+        TweenService:Create(self.Panel, STYLE.Tween, {GroupTransparency = 1}):Play()
+        if wasOpen then
             self.Window:_playSound("Close")
             self.Window:_endFocus(self.Object)
         end
-        if not self.Open then
-            task.delay(STYLE.Tween.Time, function()
-                if not self.Open and self.Panel then
-                    self.Panel.Visible = false
-                end
-            end)
-        end
-        if self.Open then
-            refreshStyle()
-        else
-            refreshStyle(false)
-        end
+        refreshStyle()
+
+        task.delay(STYLE.Tween.Time, function()
+            if self.Object and self.Object.Parent
+                and self.Object:GetAttribute("VanillaUIAnimationToken") == animationToken
+                and not self.Open then
+                self.Panel.Visible = false
+                self.Panel.GroupTransparency = 0
+                self.Closing = false
+                refreshStyle(false)
+            end
+        end)
         return self
     end
 
@@ -4204,13 +4307,31 @@ local function createFloatingPanel(window, name, title, size)
         Visible = false,
         Active = true,
         ZIndex = 80,
-        BackgroundTransparency = 0.04,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
         GroupTransparency = 0,
     }, window.ScreenGui)
-    styleSurface(panel, THEME.Background, STYLE.MainCorner)
-    panel.BackgroundTransparency = 0.04
+    addCorner(panel, STYLE.MainCorner)
+
+    -- CanvasGroup does not reliably fade its own background and stroke at the
+    -- same rate as descendants. A child surface keeps the entire panel inside
+    -- one visual group, including the border and dark acrylic background.
+    local surface = create("Frame", {
+        Name = "PanelSurface",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = THEME.Background,
+        BackgroundTransparency = 0.04,
+        BorderSizePixel = 0,
+        Active = false,
+        ZIndex = 80,
+    }, panel)
+    styleSurface(surface, THEME.Background, STYLE.MainCorner)
+    surface.BackgroundTransparency = 0.04
+
     panel:SetAttribute("VanillaUIBaseWidth", panel.Size.X.Offset)
     panel:SetAttribute("VanillaUIBaseHeight", panel.Size.Y.Offset)
+    panel:SetAttribute("VanillaUIState", "closed")
 
     local header = create("Frame", {
         Name = "TitleBar",
@@ -4230,7 +4351,7 @@ local function createFloatingPanel(window, name, title, size)
         Font = Enum.Font.GothamBold,
         Text = title,
         TextColor3 = THEME.CategoryTitle,
-        TextSize = 14,
+        TextSize = 15,
         TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 82,
     }, header)
@@ -4635,7 +4756,7 @@ function VanillaUI:CreateWindow(options)
         Font = Enum.Font.GothamMedium,
         Text = "",
         TextColor3 = THEME.Text,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 3,
@@ -4647,7 +4768,7 @@ function VanillaUI:CreateWindow(options)
         Font = Enum.Font.Gotham,
         Text = "",
         TextColor3 = THEME.SubText,
-        TextSize = 10,
+        TextSize = 11,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 3,
@@ -5031,7 +5152,7 @@ function VanillaUI:CreateWindow(options)
             Font = Enum.Font.Gotham,
             Text = title,
             TextColor3 = THEME.Text,
-            TextSize = 14,
+            TextSize = 15,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextWrapped = true,
             TextTruncate = Enum.TextTruncate.None,
@@ -5046,13 +5167,13 @@ function VanillaUI:CreateWindow(options)
             Font = Enum.Font.GothamMedium,
             Text = "",
             TextColor3 = THEME.SubText,
-            TextSize = 12,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Right,
             TextWrapped = true,
             TextTruncate = Enum.TextTruncate.None,
             ZIndex = 83,
         }, button)
-        local refreshStyle = styleInteractiveSurface(window, button, button, activeProvider, {titleLabel})
+        local refreshStyle = styleInteractiveSurface(window, button, button, activeProvider, {titleLabel, valueLabel})
         local function refresh()
             local ok, value = safeCall(getValue)
             valueLabel.Text = ok and window:_translate(tostring(value or "")) or ""
@@ -5225,11 +5346,11 @@ function VanillaUI:CreateWindow(options)
         Font = Enum.Font.Gotham,
         Text = "",
         TextColor3 = THEME.SubText,
-        TextSize = 13,
+        TextSize = 14,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
-        LineHeight = 1.14,
+        LineHeight = 1.16,
         ZIndex = 81,
     }, helpPanel)
     local helpSources = {
@@ -5255,8 +5376,7 @@ function VanillaUI:CreateWindow(options)
     immersive.ActivityHistory = create("CanvasGroup", {
         Name = "ActivityHistory",
         Size = UDim2.new(1, -2, 0, 0),
-        BackgroundColor3 = THEME.ButtonAlt,
-        BackgroundTransparency = 0.04,
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         GroupTransparency = 1,
         Visible = false,
@@ -5265,7 +5385,17 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 82,
     }, settingsList)
     addCorner(immersive.ActivityHistory, STYLE.Corner)
-    addStroke(immersive.ActivityHistory, THEME.Border, STYLE.Stroke)
+    immersive.ActivitySurface = create("Frame", {
+        Name = "PanelSurface",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = THEME.ButtonAlt,
+        BackgroundTransparency = 0.04,
+        BorderSizePixel = 0,
+        Active = false,
+        ZIndex = 82,
+    }, immersive.ActivityHistory)
+    styleSurface(immersive.ActivitySurface, THEME.ButtonAlt, STYLE.Corner)
+    immersive.ActivitySurface.BackgroundTransparency = 0.04
     window.ActivityPanel = nil
 
     immersive.ActivityTitle = create("TextLabel", {
@@ -5420,13 +5550,13 @@ function VanillaUI:CreateWindow(options)
         window:_playSound("Confirm")
     end))
 
-    immersive.UserPanel = createFloatingPanel(window, "UserPanel", "User profile", UDim2.fromOffset(390, 400))
+    immersive.UserPanel = createFloatingPanel(window, "UserPanel", "User profile", UDim2.fromOffset(400, 410))
     window.UserPanel = immersive.UserPanel
     attachScale(immersive.UserPanel)
     immersive.ProfileAvatar = create("ImageLabel", {
         Name = "Avatar",
         Position = UDim2.fromOffset(14, 60),
-        Size = UDim2.fromOffset(72, 72),
+        Size = UDim2.fromOffset(76, 76),
         BackgroundColor3 = THEME.ButtonAlt,
         BackgroundTransparency = 0.04,
         BorderSizePixel = 0,
@@ -5437,12 +5567,12 @@ function VanillaUI:CreateWindow(options)
     addStroke(immersive.ProfileAvatar, THEME.Border, STYLE.Stroke)
     immersive.ProfileName = create("TextLabel", {
         Position = UDim2.fromOffset(98, 62),
-        Size = UDim2.new(1, -112, 0, 24),
+        Size = UDim2.new(1, -112, 0, 26),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = "",
         TextColor3 = THEME.CategoryTitle,
-        TextSize = 16,
+        TextSize = 17,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 82,
@@ -5454,7 +5584,7 @@ function VanillaUI:CreateWindow(options)
         Font = Enum.Font.Gotham,
         Text = "",
         TextColor3 = THEME.SubText,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 82,
@@ -5466,14 +5596,14 @@ function VanillaUI:CreateWindow(options)
         Font = Enum.Font.GothamMedium,
         Text = "",
         TextColor3 = THEME.Accent,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 82,
     }, immersive.UserPanel)
     immersive.ProfileRows = create("Frame", {
-        Position = UDim2.fromOffset(14, 144),
-        Size = UDim2.new(1, -28, 0, 155),
+        Position = UDim2.fromOffset(14, 146),
+        Size = UDim2.new(1, -28, 0, 165),
         BackgroundTransparency = 1,
         ZIndex = 82,
     }, immersive.UserPanel)
@@ -5481,7 +5611,7 @@ function VanillaUI:CreateWindow(options)
     immersive.ProfileValues = {}
     local function createProfileRow(sourceTitle)
         local row = create("Frame", {
-            Size = UDim2.new(1, 0, 0, 27),
+            Size = UDim2.new(1, 0, 0, 29),
             BackgroundColor3 = THEME.ButtonAlt,
             BackgroundTransparency = STYLE.Acrylic,
             BorderSizePixel = 0,
@@ -5495,7 +5625,7 @@ function VanillaUI:CreateWindow(options)
             Font = Enum.Font.Gotham,
             Text = sourceTitle,
             TextColor3 = THEME.SubText,
-            TextSize = 11,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             ZIndex = 83,
         }, row)
@@ -5508,7 +5638,7 @@ function VanillaUI:CreateWindow(options)
             Font = Enum.Font.GothamMedium,
             Text = "",
             TextColor3 = THEME.Text,
-            TextSize = 11,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Right,
             TextTruncate = Enum.TextTruncate.AtEnd,
             ZIndex = 83,
@@ -5521,8 +5651,8 @@ function VanillaUI:CreateWindow(options)
     createProfileRow("Project")
     createProfileRow("Version")
     immersive.ProfileActions = create("Frame", {
-        Position = UDim2.new(0, 14, 1, -94),
-        Size = UDim2.new(1, -28, 0, 80),
+        Position = UDim2.new(0, 14, 1, -96),
+        Size = UDim2.new(1, -28, 0, 82),
         BackgroundTransparency = 1,
         ZIndex = 82,
     }, immersive.UserPanel)
@@ -5537,7 +5667,7 @@ function VanillaUI:CreateWindow(options)
             LayoutOrder = order,
             Text = sourceTitle,
             Font = Enum.Font.GothamMedium,
-            TextSize = 11,
+            TextSize = 13,
             ZIndex = 83,
         }, immersive.ProfileActions)
         styleButton(window, button)
@@ -5619,78 +5749,125 @@ function VanillaUI:CreateWindow(options)
         )
     end
 
+    window._panelTweens = window._panelTweens or setmetatable({}, {__mode = "k"})
+
     local function nextPanelAnimationToken(panel)
         local token = (panel:GetAttribute("VanillaUIAnimationToken") or 0) + 1
         panel:SetAttribute("VanillaUIAnimationToken", token)
         return token
     end
+
     local function openFloatingPanel(panel)
-        if not panel then
+        if not panel then return end
+        local state = panel:GetAttribute("VanillaUIState")
+        if state == "open" or state == "opening" then
+            window:_refreshPanelButton(panel)
             return
         end
+
+        local previous = window._panelTweens[panel]
+        if previous then
+            pcall(function() previous:Cancel() end)
+            window._panelTweens[panel] = nil
+        end
+
         window:_playSound("Open")
         window:_beginFocus(panel, function()
             if type(window._closeFloatingPanel) == "function" then
                 window:_closeFloatingPanel(panel)
             end
         end, panel.Name)
+
         local token = nextPanelAnimationToken(panel)
         local target = floatingPanelTarget()
+        panel:SetAttribute("VanillaUIState", "opening")
         panel:SetAttribute("VanillaUIAnimating", true)
         panel.Visible = true
         panel.Active = true
         panel.Position = UDim2.new(target.X.Scale, target.X.Offset, target.Y.Scale, target.Y.Offset + 8)
         panel.GroupTransparency = 1
         window:_refreshPanelButton(panel)
-        TweenService:Create(panel, STYLE.TweenPanel, {
+
+        local animation = TweenService:Create(panel, STYLE.TweenPanel, {
             Position = target,
             GroupTransparency = 0,
-        }):Play()
-        task.delay(STYLE.TweenPanel.Time, function()
+        })
+        window._panelTweens[panel] = animation
+        local completed
+        completed = animation.Completed:Connect(function()
+            disconnect(completed)
+            if window._panelTweens[panel] == animation then
+                window._panelTweens[panel] = nil
+            end
             if panel and panel.Parent and panel:GetAttribute("VanillaUIAnimationToken") == token then
                 panel.GroupTransparency = 0
+                panel:SetAttribute("VanillaUIState", "open")
                 panel:SetAttribute("VanillaUIAnimating", false)
+                window:_refreshPanelButton(panel)
             end
         end)
+        animation:Play()
     end
 
     local function closeFloatingPanel(panel, immediate)
-        if not panel or not panel.Visible then
-            if panel then
-                window:_refreshPanelButton(panel)
-            end
+        if not panel then return end
+        local state = panel:GetAttribute("VanillaUIState")
+        if (not panel.Visible or state == "closed") and not immediate then
+            window:_refreshPanelButton(panel)
             return
         end
+        if state == "closing" and not immediate then
+            return
+        end
+
+        local previous = window._panelTweens[panel]
+        if previous then
+            pcall(function() previous:Cancel() end)
+            window._panelTweens[panel] = nil
+        end
+
         window:_playSound("Close")
         window:_endFocus(panel, immediate == true)
         local token = nextPanelAnimationToken(panel)
         local target = floatingPanelTarget()
+        panel:SetAttribute("VanillaUIState", "closing")
         panel:SetAttribute("VanillaUIAnimating", true)
         panel.Active = false
+
         if immediate then
             panel.GroupTransparency = 1
             panel.Visible = false
             panel.Position = target
             panel.GroupTransparency = 0
             panel.Active = true
+            panel:SetAttribute("VanillaUIState", "closed")
             panel:SetAttribute("VanillaUIAnimating", false)
             window:_refreshPanelButton(panel)
             return
         end
-        TweenService:Create(panel, STYLE.TweenPanel, {
+
+        local animation = TweenService:Create(panel, STYLE.TweenPanel, {
             Position = UDim2.new(target.X.Scale, target.X.Offset, target.Y.Scale, target.Y.Offset + 8),
             GroupTransparency = 1,
-        }):Play()
-        task.delay(STYLE.TweenPanel.Time, function()
+        })
+        window._panelTweens[panel] = animation
+        local completed
+        completed = animation.Completed:Connect(function()
+            disconnect(completed)
+            if window._panelTweens[panel] == animation then
+                window._panelTweens[panel] = nil
+            end
             if panel and panel.Parent and panel:GetAttribute("VanillaUIAnimationToken") == token then
                 panel.Visible = false
                 panel.Position = target
                 panel.GroupTransparency = 0
                 panel.Active = true
+                panel:SetAttribute("VanillaUIState", "closed")
                 panel:SetAttribute("VanillaUIAnimating", false)
                 window:_refreshPanelButton(panel)
             end
         end)
+        animation:Play()
     end
 
     function window:_closeFloatingPanel(panel, immediate)
@@ -5706,7 +5883,8 @@ function VanillaUI:CreateWindow(options)
     end
 
     local function togglePanel(panel)
-        local shouldOpen = not panel.Visible
+        local state = panel:GetAttribute("VanillaUIState")
+        local shouldOpen = not panel.Visible or state == "closing" or state == "closed"
         hideFloatingPanels(panel)
         if shouldOpen then
             openFloatingPanel(panel)
@@ -6483,7 +6661,7 @@ end
 
 
 --[==[
-# VanillaUI v0.7.2, documentación completa de API
+# VanillaUI v0.7.3, documentación completa de API
 
 ## 1. Propósito
 
@@ -7385,7 +7563,8 @@ Prueba siempre la versión ofuscada. Algunos ofuscadores pueden romper metatable
 
 ## 30. Versión documentada
 
-- Biblioteca: VanillaUI v0.7.2.
+- Biblioteca: VanillaUI v0.7.3.
+- Cierre visual sincronizado, contraste activo reforzado y tipografía de perfil ampliada.
 - Tema: V+ Sentinel.
 - Invitación integrada: `https://discord.gg/CJP24bGhGJ`.
 - URL RAW esperada: `https://raw.githubusercontent.com/vista8kolo/VanillaUI/refs/heads/main/a`.

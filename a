@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.7.3
+    VanillaUI v0.7.4
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.7.3",
+    Version = "0.7.4",
     Flags = {},
 }
 
@@ -33,6 +33,9 @@ local SEARCH_DEBOUNCE = 0.06
 local DEFAULT_TEXT_SIZE = 16
 local DEFAULT_DESCRIPTION_SIZE = 13
 local DEFAULT_NOTIFICATION_WIDTH = 340
+local MIN_CONTROL_WIDTH = 160
+local MAX_TITLE_LINES = 3
+local MAX_DESCRIPTION_LINES = 5
 local DEFAULT_RESPONSIVE_RULES = {
     Wide = 1100,
     Compact = 760,
@@ -399,6 +402,30 @@ local function tween(object, properties)
     return animation
 end
 
+local function estimateControlWidth(window, object)
+    local width = object and object.AbsoluteSize.X or 0
+    if width and width >= MIN_CONTROL_WIDTH then
+        return width
+    end
+    if window and window._singleTabMode and window.TabHolder and window.TabHolder.AbsoluteSize.X >= MIN_CONTROL_WIDTH then
+        return math.max(MIN_CONTROL_WIDTH, window.TabHolder.AbsoluteSize.X - 8)
+    end
+    return math.max(MIN_CONTROL_WIDTH, tonumber(window and window.TabWidth) or 180)
+end
+
+local function measureWrappedHeight(text, font, textSize, width, maxLines)
+    text = tostring(text or "")
+    if text == "" then
+        return 0
+    end
+    width = math.max(36, tonumber(width) or 120)
+    local ok, bounds = pcall(TextService.GetTextSize, TextService, text, textSize, font, Vector2.new(width, 1000))
+    local lineHeight = math.max(1, math.ceil(textSize * 1.22))
+    local measured = ok and math.ceil(bounds.Y) or lineHeight
+    local lineLimit = math.max(1, tonumber(maxLines) or 1) * lineHeight
+    return math.clamp(measured, lineHeight, lineLimit)
+end
+
 local function normalizeKey(value, fallback)
     if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
         return value
@@ -732,6 +759,13 @@ function WindowMethods:RefreshTranslations()
             element:_refreshLocalizedText()
         elseif type(element.Refresh) == "function" and element.Type == "Dropdown" then
             element:_refreshVisual()
+        end
+        if type(element._refreshLayout) == "function" then
+            task.defer(function()
+                if element.Object and element.Object.Parent then
+                    element:_refreshLayout()
+                end
+            end)
         end
     end
 
@@ -1344,10 +1378,24 @@ local function registerElement(section, element, searchableObject)
     end
 
     if type(section._refreshGroupSize) == "function" then
+        if section.IsGroup and searchableObject then
+            registerConnection(window, searchableObject:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+                if searchableObject.Parent then
+                    section:_refreshGroupSize()
+                end
+            end))
+        end
         task.defer(section._refreshGroupSize, section)
     end
     if type(element._refreshLocalizedText) == "function" then
         element:_refreshLocalizedText()
+    end
+    if type(element._refreshLayout) == "function" then
+        task.defer(function()
+            if element.Object and element.Object.Parent then
+                element:_refreshLayout()
+            end
+        end)
     end
     if type(window._refreshSearchResults) == "function" then
         task.defer(window._refreshSearchResults)
@@ -1460,22 +1508,23 @@ local function createElementIcon(parent, icon, x, y)
     }, parent)
 end
 
-local function createElementHeader(parent, options, rightWidth, forcedHeight)
+local function createElementHeader(parent, window, options, rightWidth, minimumHeight, bottomReserve, onHeightChanged)
     options = options or {}
+    rightWidth = math.max(8, tonumber(rightWidth) or 10)
+    minimumHeight = math.max(38, tonumber(minimumHeight) or 44)
+    bottomReserve = math.max(0, tonumber(bottomReserve) or 0)
+
     local title = option(options, {"name", "Name", "title", "Title"}, "Control")
     local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local icon = option(options, {"icon", "Icon"}, nil)
     local hasDescription = description ~= ""
-    local height = forcedHeight or (hasDescription and 72 or 44)
-    local iconLabel = createElementIcon(parent, icon, 10, math.floor((height - 16) / 2))
+    local iconLabel = createElementIcon(parent, icon, 10, 10)
     local left = iconLabel and 34 or 10
-    local titleY = hasDescription and 5 or 0
-    local titleHeight = hasDescription and 30 or height
 
     local titleLabel = create("TextLabel", {
         Name = "Title",
-        Position = UDim2.fromOffset(left, titleY),
-        Size = UDim2.new(1, -(left + (rightWidth or 10)), 0, titleHeight),
+        Position = UDim2.fromOffset(left, 6),
+        Size = UDim2.new(1, -(left + rightWidth), 0, 22),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamMedium,
         Text = tostring(title),
@@ -1492,8 +1541,8 @@ local function createElementHeader(parent, options, rightWidth, forcedHeight)
     if hasDescription then
         descriptionLabel = create("TextLabel", {
             Name = "Description",
-            Position = UDim2.fromOffset(left, 35),
-            Size = UDim2.new(1, -(left + (rightWidth or 10)), 0, height - 40),
+            Position = UDim2.fromOffset(left, 31),
+            Size = UDim2.new(1, -(left + rightWidth), 0, 26),
             BackgroundTransparency = 1,
             Font = Enum.Font.Gotham,
             Text = description,
@@ -1508,7 +1557,91 @@ local function createElementHeader(parent, options, rightWidth, forcedHeight)
         }, parent)
     end
 
-    return titleLabel, descriptionLabel, iconLabel, height
+    local lastWidth = 0
+    local relayoutQueued = false
+
+    local function relayout()
+        if not parent or not parent.Parent then
+            return minimumHeight
+        end
+
+        local width = estimateControlWidth(window, parent)
+        local usableWidth = math.max(48, width - left - rightWidth)
+        local titleHeight = measureWrappedHeight(
+            titleLabel.Text,
+            Enum.Font.GothamMedium,
+            titleLabel.TextSize,
+            usableWidth,
+            MAX_TITLE_LINES
+        )
+        local descriptionShown = descriptionLabel and descriptionLabel.Visible
+        local descriptionHeight = descriptionShown and measureWrappedHeight(
+            descriptionLabel.Text,
+            Enum.Font.Gotham,
+            descriptionLabel.TextSize,
+            usableWidth,
+            MAX_DESCRIPTION_LINES
+        ) or 0
+
+        local contentHeight
+        local titleY
+        if descriptionShown then
+            titleY = 6
+            contentHeight = 6 + titleHeight + 3 + descriptionHeight + 7
+        else
+            contentHeight = math.max(minimumHeight - bottomReserve, titleHeight + 12)
+            titleY = math.floor((contentHeight - titleHeight) / 2)
+        end
+
+        local totalHeight = math.max(minimumHeight, contentHeight + bottomReserve)
+        parent.Size = UDim2.new(parent.Size.X.Scale, parent.Size.X.Offset, 0, totalHeight)
+
+        titleLabel.Position = UDim2.fromOffset(left, titleY)
+        titleLabel.Size = UDim2.new(1, -(left + rightWidth), 0, titleHeight)
+
+        if descriptionLabel then
+            descriptionLabel.Position = UDim2.fromOffset(left, titleY + titleHeight + 3)
+            descriptionLabel.Size = UDim2.new(1, -(left + rightWidth), 0, descriptionShown and descriptionHeight or 0)
+        end
+
+        if iconLabel then
+            iconLabel.Position = UDim2.fromOffset(10, titleY + math.max(0, math.floor((titleHeight - 16) / 2)))
+        end
+
+        if type(onHeightChanged) == "function" then
+            safeCall(onHeightChanged, totalHeight, contentHeight)
+        end
+
+        return totalHeight
+    end
+
+    local function queueRelayout()
+        if relayoutQueued then
+            return
+        end
+        relayoutQueued = true
+        task.defer(function()
+            relayoutQueued = false
+            relayout()
+        end)
+    end
+
+    if window then
+        registerConnection(window, titleLabel:GetPropertyChangedSignal("Text"):Connect(queueRelayout))
+        if descriptionLabel then
+            registerConnection(window, descriptionLabel:GetPropertyChangedSignal("Text"):Connect(queueRelayout))
+        end
+        registerConnection(window, parent:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+            local width = math.floor(parent.AbsoluteSize.X + 0.5)
+            if width ~= lastWidth then
+                lastWidth = width
+                queueRelayout()
+            end
+        end))
+    end
+
+    local resolvedHeight = relayout()
+    return titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayout
 end
 
 local function styleInteractiveSurface(window, object, interact, activeProvider, textObjects)
@@ -1576,21 +1709,34 @@ end
 local function createSectionTitle(section, title)
     local label = create("TextLabel", {
         Name = "SectionTitle",
-        Size = UDim2.new(1, 0, 0, 20),
-        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 26),
+        BackgroundColor3 = THEME.Background,
+        BackgroundTransparency = 0.20,
+        BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
         Text = string.upper(title),
-        TextColor3 = THEME.SubText,
-        TextSize = 13,
+        TextColor3 = THEME.CategoryTitle,
+        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+        TextStrokeTransparency = 0.48,
+        TextSize = 14,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = true,
+        TextTruncate = Enum.TextTruncate.AtEnd,
         LayoutOrder = section:_nextOrder(),
     }, section.Parent)
+    addCorner(label, STYLE.Corner)
+    addStroke(label, THEME.Border, 0.28)
+    create("UIPadding", {
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+    }, label)
 
     local divider = create("Frame", {
         Name = "SectionDivider",
-        Size = UDim2.new(1, 0, 0, 1),
+        Size = UDim2.new(1, -8, 0, 1),
         BackgroundColor3 = THEME.Accent,
-        BackgroundTransparency = 0.58,
+        BackgroundTransparency = 0.42,
         BorderSizePixel = 0,
         LayoutOrder = section:_nextOrder(),
     }, section.Parent)
@@ -1647,7 +1793,8 @@ function SectionMethods:CreateButton(options)
         Text = "",
         AutoButtonColor = false,
     }, self.Parent)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(button, options, 12, height)
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(button, self.Window, options, 12, height)
+    height = resolvedHeight
 
     local element = setmetatable({
         Type = "Button",
@@ -1660,6 +1807,7 @@ function SectionMethods:CreateButton(options)
         Callback = option(options, {"callback", "Callback"}, nil),
         ForgetState = true,
     }, ElementMethods)
+    element._refreshLayout = relayoutHeader
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, nil, {titleLabel, descriptionLabel})
     element.Refresh = refreshStyle
@@ -1715,7 +1863,8 @@ function SectionMethods:CreateToggle(options)
         Text = "",
         AutoButtonColor = false,
     }, self.Parent)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(button, options, 48, height)
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(button, self.Window, options, 48, height)
+    height = resolvedHeight
 
     local indicator = create("Frame", {
         Name = "Indicator",
@@ -1757,6 +1906,7 @@ function SectionMethods:CreateToggle(options)
         DefaultValue = default,
         Callback = option(options, {"callback", "Callback"}, nil),
     }, ElementMethods)
+    element._refreshLayout = relayoutHeader
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
         return element.value == true
@@ -1826,7 +1976,8 @@ function SectionMethods:CreateSlider(options)
         LayoutOrder = self:_nextOrder(),
     }, self.Parent)
     styleSurface(container, THEME.ButtonAlt)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(container, options, 76, height - 12)
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(container, self.Window, options, 76, height, 20)
+    height = resolvedHeight
 
     local valueLabel = create("TextLabel", {
         Name = "Value",
@@ -1898,6 +2049,7 @@ function SectionMethods:CreateSlider(options)
         Suffix = suffix,
         Callback = option(options, {"callback", "Callback"}, nil),
     }, ElementMethods)
+    element._refreshLayout = relayoutHeader
 
     function element:_round(value)
         local stepped = math.floor(((value - self.Min) / self.Increment) + 0.5) * self.Increment + self.Min
@@ -2008,7 +2160,38 @@ function SectionMethods:CreateDropdown(options)
         AutoButtonColor = false,
         ZIndex = 3,
     }, root)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(button, options, 104, headerHeight)
+
+    local contentGroup
+    local choices
+    local element
+    local choicesLocalY = searchable and 37 or 0
+
+    local function syncDropdownHeader(newHeight)
+        headerHeight = newHeight
+        button.Size = UDim2.new(1, 0, 0, headerHeight)
+        if contentGroup then
+            contentGroup.Position = UDim2.fromOffset(0, headerHeight + 5)
+        end
+        if element then
+            element.HeaderHeight = headerHeight
+            element.ChoicesY = headerHeight + 5 + choicesLocalY
+            local openHeight = element.Choices and element.Choices.Size.Y.Offset or 0
+            root.Size = UDim2.new(1, 0, 0, element.Open and (element.ChoicesY + openHeight) or headerHeight)
+        else
+            root.Size = UDim2.new(1, 0, 0, headerHeight)
+        end
+    end
+
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(
+        button,
+        self.Window,
+        options,
+        104,
+        headerHeight,
+        0,
+        syncDropdownHeader
+    )
+    syncDropdownHeader(resolvedHeight)
 
     local valueLabel = create("TextLabel", {
         Name = "Value",
@@ -2027,7 +2210,7 @@ function SectionMethods:CreateDropdown(options)
         ZIndex = 4,
     }, button)
 
-    local contentGroup = create("CanvasGroup", {
+    contentGroup = create("CanvasGroup", {
         Name = "DropdownContent",
         Position = UDim2.fromOffset(0, headerHeight + 5),
         Size = UDim2.new(1, 0, 0, 240),
@@ -2058,9 +2241,8 @@ function SectionMethods:CreateDropdown(options)
         create("UIPadding", {PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10)}, searchBox)
     end
 
-    local choicesLocalY = searchable and 37 or 0
     local choicesY = headerHeight + 5 + choicesLocalY
-    local choices = create("ScrollingFrame", {
+    choices = create("ScrollingFrame", {
         Name = "Choices",
         Position = UDim2.fromOffset(0, choicesLocalY),
         Size = UDim2.new(1, 0, 0, 0),
@@ -2078,7 +2260,7 @@ function SectionMethods:CreateDropdown(options)
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, choices)
 
-    local element = setmetatable({
+    element = setmetatable({
         Type = "Dropdown",
         Stateful = true,
         Title = title,
@@ -2106,6 +2288,10 @@ function SectionMethods:CreateDropdown(options)
         DefaultValue = normalizeDropdownSelection(initial),
         Callback = option(options, {"callback", "Callback"}, nil),
     }, ElementMethods)
+    element._refreshLayout = function()
+        local newHeight = relayoutHeader()
+        syncDropdownHeader(newHeight)
+    end
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
         return element.Open or element.Closing
@@ -2404,7 +2590,8 @@ function SectionMethods:CreateInput(options)
         LayoutOrder = self:_nextOrder(),
     }, self.Parent)
     styleSurface(root, THEME.ButtonAlt)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(root, options, 102, height)
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(root, self.Window, options, 102, height)
+    height = resolvedHeight
 
     local textBox = create("TextBox", {
         Name = "Field",
@@ -2442,6 +2629,7 @@ function SectionMethods:CreateInput(options)
         RemoveAfter = option(options, {"removeTextAfterFocusLost", "RemoveTextAfterFocusLost"}, false) == true,
         Callback = option(options, {"callback", "Callback"}, nil),
     }, ElementMethods)
+    element._refreshLayout = relayoutHeader
 
     function element:Set(value, skipCallback, skipSave)
         value = tostring(value or "")
@@ -2504,18 +2692,21 @@ function SectionMethods:CreateKeybind(options)
         Text = "",
         AutoButtonColor = false,
     }, self.Parent)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(button, options, 80, height)
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(button, self.Window, options, 104, height)
+    height = resolvedHeight
     local keyLabel = create("TextLabel", {
         Name = "Key",
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.fromOffset(64, 24),
+        Size = UDim2.fromOffset(88, 24),
         BackgroundColor3 = THEME.ButtonAlt,
         BorderSizePixel = 0,
         Font = Enum.Font.GothamMedium,
         Text = default.Name,
         TextColor3 = THEME.SubText,
-        TextSize = 12,
+        TextSize = 11,
+        TextWrapped = false,
+        TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 4,
     }, button)
     addCorner(keyLabel, STYLE.Corner)
@@ -2540,6 +2731,7 @@ function SectionMethods:CreateKeybind(options)
         OnChanged = option(options, {"onChanged", "OnChanged", "changed", "Changed"}, nil),
         Capturing = false,
     }, ElementMethods)
+    element._refreshLayout = relayoutHeader
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
         return element.Capturing
@@ -2611,7 +2803,34 @@ function SectionMethods:CreateColorPicker(options)
         AutoButtonColor = false,
         ZIndex = 3,
     }, root)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(button, options, 88, headerHeight)
+
+    local panel
+    local element
+
+    local function syncColorHeader(newHeight)
+        headerHeight = newHeight
+        button.Size = UDim2.new(1, 0, 0, headerHeight)
+        if panel then
+            panel.Position = UDim2.fromOffset(0, headerHeight + 5)
+        end
+        if element then
+            element.HeaderHeight = headerHeight
+            root.Size = UDim2.new(1, 0, 0, element.Open and (headerHeight + panelHeight + 5) or headerHeight)
+        else
+            root.Size = UDim2.new(1, 0, 0, headerHeight)
+        end
+    end
+
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(
+        button,
+        self.Window,
+        options,
+        88,
+        headerHeight,
+        0,
+        syncColorHeader
+    )
+    syncColorHeader(resolvedHeight)
 
     local swatch = create("Frame", {
         Name = "Swatch",
@@ -2636,7 +2855,7 @@ function SectionMethods:CreateColorPicker(options)
         ZIndex = 5,
     }, swatch)
 
-    local panel = create("CanvasGroup", {
+    panel = create("CanvasGroup", {
         Name = "Panel",
         Position = UDim2.fromOffset(0, headerHeight + 5),
         Size = UDim2.new(1, 0, 0, panelHeight),
@@ -2661,7 +2880,7 @@ function SectionMethods:CreateColorPicker(options)
     panelSurface.BackgroundTransparency = STYLE.Acrylic
 
     local hue, saturation, brightness = default:ToHSV()
-    local element = setmetatable({
+    element = setmetatable({
         Type = "ColorPicker",
         Stateful = true,
         Title = title,
@@ -2674,6 +2893,7 @@ function SectionMethods:CreateColorPicker(options)
         Swatch = swatch,
         HexLabel = hexLabel,
         Panel = panel,
+        HeaderHeight = headerHeight,
         Flag = option(options, {"flag", "Flag"}, nil),
         ForgetState = option(options, {"forgetState", "ForgetState"}, false) == true,
         value = default,
@@ -2689,6 +2909,10 @@ function SectionMethods:CreateColorPicker(options)
         DefaultTransparency = defaultTransparency,
         AllowTransparency = allowTransparency,
     }, ElementMethods)
+    element._refreshLayout = function()
+        local newHeight = relayoutHeader()
+        syncColorHeader(newHeight)
+    end
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
         return element.Open or element.Closing
@@ -3194,7 +3418,8 @@ function SectionMethods:CreateStat(options)
         LayoutOrder = self:_nextOrder(),
     }, self.Parent)
     styleSurface(root, THEME.ButtonAlt)
-    local titleLabel, descriptionLabel, iconLabel = createElementHeader(root, options, 88, height)
+    local titleLabel, descriptionLabel, iconLabel, resolvedHeight, relayoutHeader = createElementHeader(root, self.Window, options, 88, height)
+    height = resolvedHeight
     local valueLabel = create("TextLabel", {
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
@@ -3225,6 +3450,7 @@ function SectionMethods:CreateStat(options)
         AnimationToken = 0,
         ForgetState = true,
     }, ElementMethods)
+    element._refreshLayout = relayoutHeader
 
     local function format(value)
         if type(element.Formatter) == "function" then
@@ -3391,33 +3617,23 @@ end
 function SectionMethods:CreateGroup(options)
     options = type(options) == "table" and options or {}
     local direction = string.lower(tostring(option(options, {"direction", "Direction"}, "column")))
-    local isRow = direction == "row" or direction == "horizontal"
-    local columns = math.clamp(math.floor(tonumber(option(options, {"columns", "Columns"}, 2)) or 2), 1, 4)
+    local requestedRow = direction == "row" or direction == "horizontal"
+    local requestedColumns = math.clamp(math.floor(tonumber(option(options, {"columns", "Columns"}, 2)) or 2), 1, 4)
     local spacing = math.clamp(tonumber(option(options, {"spacing", "Spacing"}, 6)) or 6, 0, 16)
+    local minimumCellWidth = math.clamp(
+        tonumber(option(options, {"minimumCellWidth", "MinimumCellWidth", "minCellWidth", "MinCellWidth"}, MIN_CONTROL_WIDTH)) or MIN_CONTROL_WIDTH,
+        120,
+        260
+    )
 
     local frame = create("Frame", {
         Name = "Group",
         Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = isRow and Enum.AutomaticSize.None or Enum.AutomaticSize.Y,
+        AutomaticSize = Enum.AutomaticSize.None,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         LayoutOrder = self:_nextOrder(),
     }, self.Parent)
-
-    local layout
-    if isRow then
-        layout = create("UIGridLayout", {
-            CellPadding = UDim2.fromOffset(spacing, spacing),
-            CellSize = UDim2.new(1 / columns, -spacing, 0, 56),
-            FillDirectionMaxCells = columns,
-            SortOrder = Enum.SortOrder.LayoutOrder,
-        }, frame)
-    else
-        layout = create("UIListLayout", {
-            Padding = UDim.new(0, spacing),
-            SortOrder = Enum.SortOrder.LayoutOrder,
-        }, frame)
-    end
 
     local group = setmetatable({
         Window = self.Window,
@@ -3427,17 +3643,108 @@ function SectionMethods:CreateGroup(options)
         Title = tostring(option(options, {"name", "Name", "title", "Title"}, "Group")),
         Elements = {},
         IsGroup = true,
-        Direction = isRow and "Row" or "Column",
-        Columns = columns,
-        Layout = layout,
+        RequestedRow = requestedRow,
+        RequestedColumns = requestedColumns,
+        Direction = "Column",
+        Columns = 1,
+        Spacing = spacing,
+        MinimumCellWidth = minimumCellWidth,
+        Layout = nil,
     }, {__index = SectionMethods})
 
+    local lastWidth = -1
+
+    local function elementHeight(element)
+        local object = element and element.Object
+        if not object or not object.Parent then
+            return 0
+        end
+        local offset = object.Size.Y.Offset
+        if offset and offset > 0 then
+            return offset
+        end
+        return math.max(0, math.floor(object.AbsoluteSize.Y + 0.5))
+    end
+
     function group:_refreshGroupSize()
-        if self.Direction == "Row" then
-            local rows = math.max(1, math.ceil(#self.Elements / self.Columns))
-            self.Object.Size = UDim2.new(1, 0, 0, rows * 56 + math.max(0, rows - 1) * spacing)
+        local count = #self.Elements
+        if count == 0 then
+            self.Object.Size = UDim2.new(1, 0, 0, 0)
+            return
+        end
+
+        if self.Direction == "Row" and self.Layout and self.Layout:IsA("UIGridLayout") then
+            local cellHeight = 44
+            for _, element in ipairs(self.Elements) do
+                cellHeight = math.max(cellHeight, elementHeight(element))
+            end
+            self.Layout.CellSize = UDim2.new(
+                1 / self.Columns,
+                -math.ceil((self.Spacing * math.max(0, self.Columns - 1)) / self.Columns),
+                0,
+                cellHeight
+            )
+            local rows = math.max(1, math.ceil(count / self.Columns))
+            self.Object.Size = UDim2.new(1, 0, 0, rows * cellHeight + math.max(0, rows - 1) * self.Spacing)
+        else
+            local total = 0
+            for _, element in ipairs(self.Elements) do
+                total = total + elementHeight(element)
+            end
+            total = total + math.max(0, count - 1) * self.Spacing
+            self.Object.Size = UDim2.new(1, 0, 0, total)
         end
     end
+
+    function group:_refreshGroupLayout(force)
+        local width = math.floor(self.Object.AbsoluteSize.X + 0.5)
+        if width < 40 then
+            width = estimateControlWidth(self.Window, self.Object)
+        end
+        if not force and width == lastWidth then
+            self:_refreshGroupSize()
+            return
+        end
+        lastWidth = width
+
+        local maximumColumns = math.max(1, math.floor((width + self.Spacing) / (self.MinimumCellWidth + self.Spacing)))
+        local columns = self.RequestedRow and math.clamp(math.min(self.RequestedColumns, maximumColumns), 1, self.RequestedColumns) or 1
+        local useGrid = self.RequestedRow and columns > 1
+
+        if self.Layout then
+            destroy(self.Layout)
+            self.Layout = nil
+        end
+
+        self.Columns = useGrid and columns or 1
+        self.Direction = useGrid and "Row" or "Column"
+
+        if useGrid then
+            self.Layout = create("UIGridLayout", {
+                CellPadding = UDim2.fromOffset(self.Spacing, self.Spacing),
+                CellSize = UDim2.new(1 / self.Columns, 0, 0, 56),
+                FillDirectionMaxCells = self.Columns,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+            }, self.Object)
+        else
+            self.Layout = create("UIListLayout", {
+                Padding = UDim.new(0, self.Spacing),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+            }, self.Object)
+        end
+
+        self:_refreshGroupSize()
+    end
+
+    registerConnection(self.Window, frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        group:_refreshGroupLayout(false)
+    end))
+
+    task.defer(function()
+        if frame.Parent then
+            group:_refreshGroupLayout(true)
+        end
+    end)
 
     return group
 end
@@ -3990,14 +4297,22 @@ function WindowMethods:CreateTab(options, icon)
     local titleButton = create("TextButton", {
         Name = "Title",
         Size = UDim2.new(1, -4, 0, 30),
-        BackgroundTransparency = 1,
+        BackgroundColor3 = THEME.Background,
+        BackgroundTransparency = 0.20,
+        BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
         Text = string.upper(title),
         TextColor3 = options.Color or THEME.CategoryTitle,
-        TextSize = 13,
+        TextStrokeColor3 = Color3.fromRGB(0, 0, 0),
+        TextStrokeTransparency = 0.48,
+        TextSize = 14,
+        TextWrapped = true,
+        TextTruncate = Enum.TextTruncate.AtEnd,
         AutoButtonColor = false,
         LayoutOrder = -1000,
     }, column)
+    addCorner(titleButton, STYLE.Corner)
+    addStroke(titleButton, THEME.Border, 0.28)
 
     local divider = create("Frame", {
         Name = "CategoryDivider",
@@ -5902,6 +6217,13 @@ function VanillaUI:CreateWindow(options)
             if element.TitleLabel then
                 element.TitleLabel.TextSize = self.ResponsiveMode == "Mobile" and 16 or DEFAULT_TEXT_SIZE
             end
+            if type(element._refreshLayout) == "function" then
+                task.defer(function()
+                    if element.Object and element.Object.Parent then
+                        element:_refreshLayout()
+                    end
+                end)
+            end
         end
     end
 
@@ -6661,7 +6983,7 @@ end
 
 
 --[==[
-# VanillaUI v0.7.3, documentación completa de API
+# VanillaUI v0.7.4, documentación completa de API
 
 ## 1. Propósito
 
@@ -6892,13 +7214,16 @@ local Group = Section:CreateGroup({
     Direction = "Row", -- Row/Horizontal o Column
     Columns = 2,
     Spacing = 6,
+    MinimumCellWidth = 160,
 })
 
 Group:CreateButton(...)
 Group:CreateToggle(...)
 ```
 
-Los grupos reutilizan la API de Section.
+Los grupos reutilizan la API de Section. Los grupos horizontales cambian
+automáticamente a una columna cuando el espacio disponible haría que los
+controles quedaran demasiado estrechos.
 
 ## 7. Propiedades compartidas por los controles
 
@@ -7563,7 +7888,7 @@ Prueba siempre la versión ofuscada. Algunos ofuscadores pueden romper metatable
 
 ## 30. Versión documentada
 
-- Biblioteca: VanillaUI v0.7.3.
+- Biblioteca: VanillaUI v0.7.4.
 - Cierre visual sincronizado, contraste activo reforzado y tipografía de perfil ampliada.
 - Tema: V+ Sentinel.
 - Invitación integrada: `https://discord.gg/CJP24bGhGJ`.

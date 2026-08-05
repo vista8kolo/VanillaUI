@@ -1,11 +1,12 @@
 --[[
-    VanillaUI v0.7.7
+    VanillaUI v0.7.8
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
+    Botones superiores ligeramente ampliados.
 ]]
 
 local VanillaUI = {
-    Version = "0.7.7",
+    Version = "0.7.8",
     Flags = {},
 }
 
@@ -4626,7 +4627,7 @@ local function createIconSearch(parent)
         Name = "SearchIconRing",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, -2, 0.5, -2),
-        Size = UDim2.fromOffset(15, 15),
+        Size = UDim2.fromOffset(16, 16),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ZIndex = 4,
@@ -4639,7 +4640,7 @@ local function createIconSearch(parent)
         Name = "SearchIconHandle",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 7, 0.5, 7),
-        Size = UDim2.fromOffset(3, 10),
+        Size = UDim2.fromOffset(3, 11),
         Rotation = -45,
         BackgroundColor3 = THEME.Text,
         BorderSizePixel = 0,
@@ -5061,7 +5062,7 @@ function VanillaUI:CreateWindow(options)
         Name = "MainBar",
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET),
-        Size = UDim2.fromOffset(0, 36),
+        Size = UDim2.fromOffset(0, 39),
         AutomaticSize = Enum.AutomaticSize.X,
         BackgroundTransparency = 1,
         Active = true,
@@ -5082,7 +5083,7 @@ function VanillaUI:CreateWindow(options)
         Name = "UserDock",
         AnchorPoint = Vector2.new(0.5, 1),
         Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET - USER_DOCK_GAP),
-        Size = UDim2.fromOffset(148, 36),
+        Size = UDim2.fromOffset(154, 39),
         BackgroundTransparency = 1,
         Active = true,
         Visible = false,
@@ -5099,7 +5100,7 @@ function VanillaUI:CreateWindow(options)
     immersive.UserAvatar = create("ImageLabel", {
         Name = "Avatar",
         Position = UDim2.fromOffset(4, 4),
-        Size = UDim2.fromOffset(28, 28),
+        Size = UDim2.fromOffset(31, 31),
         BackgroundColor3 = THEME.ButtonAlt,
         BackgroundTransparency = 0.04,
         BorderSizePixel = 0,
@@ -5109,8 +5110,8 @@ function VanillaUI:CreateWindow(options)
     addCorner(immersive.UserAvatar, 7)
     addStroke(immersive.UserAvatar, THEME.Border, STYLE.Stroke)
     immersive.UserName = create("TextLabel", {
-        Position = UDim2.fromOffset(39, 3),
-        Size = UDim2.new(1, -45, 0, 17),
+        Position = UDim2.fromOffset(42, 4),
+        Size = UDim2.new(1, -48, 0, 17),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamMedium,
         Text = "",
@@ -5121,8 +5122,8 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 3,
     }, immersive.UserButton)
     immersive.UserStatus = create("TextLabel", {
-        Position = UDim2.fromOffset(39, 19),
-        Size = UDim2.new(1, -45, 0, 14),
+        Position = UDim2.fromOffset(42, 21),
+        Size = UDim2.new(1, -48, 0, 14),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = "",
@@ -5138,7 +5139,7 @@ function VanillaUI:CreateWindow(options)
 
     local legalPlusButton = create("TextButton", {
         Name = "LegalPlusButton",
-        Size = UDim2.fromOffset(36, 36),
+        Size = UDim2.fromOffset(39, 39),
         LayoutOrder = 1,
         Text = "[L+]",
         Visible = false,
@@ -5150,7 +5151,7 @@ function VanillaUI:CreateWindow(options)
 
     local menuButton = create("TextButton", {
         Name = "MenuButton",
-        Size = UDim2.fromOffset(88, 36),
+        Size = UDim2.fromOffset(94, 39),
         LayoutOrder = 2,
         Text = options.MenuText or "Menu",
     }, mainBar)
@@ -5161,7 +5162,7 @@ function VanillaUI:CreateWindow(options)
 
     immersive.MobileNavButton = create("TextButton", {
         Name = "MobileNavButton",
-        Size = UDim2.fromOffset(104, 36),
+        Size = UDim2.fromOffset(110, 39),
         LayoutOrder = 3,
         Text = "SECTIONS",
         Visible = false,
@@ -5173,7 +5174,7 @@ function VanillaUI:CreateWindow(options)
 
     local searchButton = create("TextButton", {
         Name = "SearchButton",
-        Size = UDim2.fromOffset(36, 36),
+        Size = UDim2.fromOffset(39, 39),
         LayoutOrder = 4,
         Text = "",
     }, mainBar)
@@ -5184,7 +5185,7 @@ function VanillaUI:CreateWindow(options)
 
     local infoButton = create("TextButton", {
         Name = "InfoButton",
-        Size = UDim2.fromOffset(36, 36),
+        Size = UDim2.fromOffset(39, 39),
         LayoutOrder = 5,
         Text = "",
     }, mainBar)
@@ -5196,7 +5197,7 @@ function VanillaUI:CreateWindow(options)
         Name = "InfoIcon",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(28, 28),
+        Size = UDim2.fromOffset(29, 29),
         BackgroundColor3 = THEME.Accent,
         BorderSizePixel = 0,
         ZIndex = 3,
@@ -5233,23 +5234,23 @@ function VanillaUI:CreateWindow(options)
 
     local settingsButton = create("TextButton", {
         Name = "SettingsButton",
-        Size = UDim2.fromOffset(36, 36),
+        Size = UDim2.fromOffset(39, 39),
         LayoutOrder = 7,
         Text = "⚙",
         Font = Enum.Font.GothamMedium,
-        TextSize = 17,
+        TextSize = 18,
     }, mainBar)
     window._refreshSettingsButton = styleButton(window, settingsButton, function()
         return window.SettingsPanel and window.SettingsPanel.Visible
     end)
     settingsButton.Font = Enum.Font.GothamMedium
-    settingsButton.TextSize = 17
+    settingsButton.TextSize = 18
 
 
     local mainContainer = create("Frame", {
         Name = "MainContainer",
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET + 44),
+        Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET + 47),
         Size = options.Size or UDim2.fromOffset(960, 450),
         BackgroundTransparency = 1,
         ClipsDescendants = true,
@@ -7007,16 +7008,16 @@ function VanillaUI:CreateWindow(options)
         if barLayout then
             barLayout.Padding = UDim.new(0, mode == "Mobile" and 4 or (mode == "Compact" and 6 or 7))
         end
-        menuButton.Size = UDim2.fromOffset(mode == "Mobile" and 66 or (mode == "Compact" and 78 or 88), 36)
-        immersive.MobileNavButton.Size = UDim2.fromOffset(mode == "Mobile" and 92 or 104, 36)
-        immersive.UserDock.Size = UDim2.fromOffset(mode == "Mobile" and 42 or (mode == "Compact" and 128 or 148), 36)
+        menuButton.Size = UDim2.fromOffset(mode == "Mobile" and 70 or (mode == "Compact" and 83 or 94), 39)
+        immersive.MobileNavButton.Size = UDim2.fromOffset(mode == "Mobile" and 98 or 110, 39)
+        immersive.UserDock.Size = UDim2.fromOffset(mode == "Mobile" and 45 or (mode == "Compact" and 134 or 154), 39)
         immersive.UserButton.Size = UDim2.fromScale(1, 1)
         immersive.UserName.Visible = mode ~= "Mobile"
         immersive.UserStatus.Visible = mode ~= "Mobile"
         infoButton.Visible = mode == "Wide"
         immersive.ActivityButton.Visible = false
-        settingsButton.Size = UDim2.fromOffset(36, 36)
-        searchButton.Size = UDim2.fromOffset(36, 36)
+        settingsButton.Size = UDim2.fromOffset(39, 39)
+        searchButton.Size = UDim2.fromOffset(39, 39)
 
         local holderLayout = tabHolder:FindFirstChildOfClass("UIListLayout")
         if holderLayout then
@@ -7111,7 +7112,7 @@ end
 
 
 --[==[
-# VanillaUI v0.7.7, documentación completa de API
+# VanillaUI v0.7.8, documentación completa de API
 
 ## 1. Propósito
 
@@ -8016,8 +8017,8 @@ Prueba siempre la versión ofuscada. Algunos ofuscadores pueden romper metatable
 
 ## 30. Versión documentada
 
-- Biblioteca: VanillaUI v0.7.7.
-- Cierre visual sincronizado, contraste activo reforzado y tipografía de perfil ampliada.
+- Biblioteca: VanillaUI v0.7.8.
+- Botones superiores ligeramente ampliados, conservando proporción y adaptación responsive.
 - Tema: V+ Sentinel.
 - Invitación integrada: `https://discord.gg/CJP24bGhGJ`.
 - URL RAW esperada: `https://raw.githubusercontent.com/vista8kolo/VanillaUI/refs/heads/main/a`.

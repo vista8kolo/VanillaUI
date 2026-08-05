@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.2
+    VanillaUI v0.3
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.2.0",
+    Version = "0.3.0",
     Flags = {},
 }
 
@@ -26,6 +26,8 @@ local DISCORD_BLURPLE_HOVER = Color3.fromRGB(105, 116, 255)
 local PRIMARY_TAB_LIMIT = 5
 local FLOATING_PANEL_OFFSET = 60
 local NOTIFICATION_EXTRA_DURATION = 2
+local NOTIFICATION_BASE_WIDTH = 340
+local MIN_RESPONSIVE_SCALE = 0.72
 
 local THEME = {
     Accent = Color3.fromRGB(208, 193, 162),
@@ -51,6 +53,9 @@ local STYLE = {
     StrokeHover = 0.08,
     StrokeActive = 0.10,
     Tween = TweenInfo.new(0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+    PanelTween = TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    PanelTweenOut = TweenInfo.new(0.14, Enum.EasingStyle.Sine, Enum.EasingDirection.In),
+    NotificationTween = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 }
 
 local GLOBAL_ENV = _G
@@ -131,6 +136,12 @@ end
 
 local function tween(object, properties)
     local animation = TweenService:Create(object, STYLE.Tween, properties)
+    animation:Play()
+    return animation
+end
+
+local function tweenWithInfo(object, tweenInfo, properties)
+    local animation = TweenService:Create(object, tweenInfo or STYLE.Tween, properties)
     animation:Play()
     return animation
 end
@@ -297,6 +308,8 @@ function ElementMethods:SetTitle(title)
     end
     self.SearchText = normalizeSearchText(table.concat({
         self.Title or "",
+        self.Description or "",
+        self.Flag or "",
         self.Type or "",
         self.Section and self.Section.Title or "",
         self.Tab and self.Tab.Title or "",
@@ -359,9 +372,12 @@ local function registerElement(section, element, searchableObject)
     element.Tab = section.Tab
     element.Object = element.Object or searchableObject
     element.Title = element.Title or ""
+    element.Description = element.Description or ""
     element.Visible = true
     element.SearchText = normalizeSearchText(table.concat({
         element.Title or "",
+        element.Description or "",
+        element.Flag or "",
         element.Type or "",
         section.Title or "",
         section.Tab and section.Tab.Title or "",
@@ -399,7 +415,7 @@ end
 local function styleButton(window, button, isActiveProvider)
     button.AutoButtonColor = false
     button.Font = Enum.Font.Gotham
-    button.TextSize = 12
+    button.TextSize = 13
     button.TextWrapped = true
     button.TextScaled = false
     button.TextColor3 = THEME.Text
@@ -452,7 +468,7 @@ local function createSectionTitle(section, title)
         Font = Enum.Font.GothamBold,
         Text = string.upper(title),
         TextColor3 = THEME.SubText,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         LayoutOrder = section:_nextOrder(),
     }, section.Parent)
@@ -491,6 +507,7 @@ function SectionMethods:CreateButton(options)
         Title = title,
         Object = button,
         TitleLabel = button,
+        Description = options.Description or options.Tooltip or "",
         Callback = options.Callback,
     }, ElementMethods)
 
@@ -537,7 +554,7 @@ function SectionMethods:CreateToggle(options)
         Font = Enum.Font.Gotham,
         Text = title,
         TextColor3 = THEME.Text,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextWrapped = true,
     }, button)
@@ -570,6 +587,7 @@ function SectionMethods:CreateToggle(options)
         TitleLabel = titleLabel,
         Indicator = indicator,
         Knob = knob,
+        Description = options.Description or options.Tooltip or "",
         Flag = flag,
         Value = default,
         Callback = options.Callback,
@@ -644,7 +662,7 @@ function SectionMethods:CreateSlider(options)
         Font = Enum.Font.Gotham,
         Text = title,
         TextColor3 = THEME.Text,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
     }, container)
@@ -658,7 +676,7 @@ function SectionMethods:CreateSlider(options)
         Font = Enum.Font.GothamMedium,
         Text = "",
         TextColor3 = THEME.SubText,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Right,
     }, container)
 
@@ -700,6 +718,7 @@ function SectionMethods:CreateSlider(options)
         Bar = bar,
         Fill = fill,
         Knob = knob,
+        Description = options.Description or options.Tooltip or "",
         Flag = options.Flag,
         Value = default,
         Min = minimum,
@@ -818,7 +837,7 @@ function SectionMethods:CreateDropdown(options)
         Font = Enum.Font.Gotham,
         Text = title,
         TextColor3 = THEME.Text,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
     }, button)
@@ -832,7 +851,7 @@ function SectionMethods:CreateDropdown(options)
         Font = Enum.Font.GothamMedium,
         Text = tostring(default or "Ninguno"),
         TextColor3 = THEME.SubText,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Right,
         TextTruncate = Enum.TextTruncate.AtEnd,
     }, button)
@@ -859,6 +878,7 @@ function SectionMethods:CreateDropdown(options)
         ValueLabel = valueLabel,
         Choices = choices,
         Values = values,
+        Description = options.Description or options.Tooltip or "",
         Flag = options.Flag,
         Value = default,
         Open = false,
@@ -970,7 +990,7 @@ function SectionMethods:CreateParagraph(options)
         Font = Enum.Font.GothamBold,
         Text = title,
         TextColor3 = THEME.Text,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         Visible = title ~= "",
     }, frame)
@@ -983,13 +1003,13 @@ function SectionMethods:CreateParagraph(options)
         Font = Enum.Font.Gotham,
         Text = content,
         TextColor3 = THEME.SubText,
-        TextSize = 10,
+        TextSize = 11,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
     }, frame)
 
-    local bounds = TextService:GetTextSize(content, 10, Enum.Font.Gotham, Vector2.new(160, 1000))
+    local bounds = TextService:GetTextSize(content, 11, Enum.Font.Gotham, Vector2.new(180, 1000))
     frame.Size = UDim2.new(1, 0, 0, math.max(48, bounds.Y + (title ~= "" and 35 or 18)))
 
     local element = setmetatable({
@@ -998,6 +1018,7 @@ function SectionMethods:CreateParagraph(options)
         Object = frame,
         TitleLabel = titleLabel,
         ContentLabel = contentLabel,
+        Description = content,
     }, ElementMethods)
 
     function element:Set(contentOptions)
@@ -1277,7 +1298,7 @@ function WindowMethods:CreateTab(options, icon)
         Font = Enum.Font.GothamBold,
         Text = string.upper(title),
         TextColor3 = options.Color or THEME.CategoryTitle,
-        TextSize = 13,
+        TextSize = 14,
         AutoButtonColor = false,
         LayoutOrder = -1000,
     }, column)
@@ -1366,31 +1387,54 @@ function WindowMethods:Notify(options)
         stroke.Transparency = 1
     end
 
-    create("UIPadding", {
-        PaddingTop = UDim.new(0, 10),
-        PaddingBottom = UDim.new(0, 10),
-        PaddingLeft = UDim.new(0, 12),
-        PaddingRight = UDim.new(0, 12),
+    local notificationScale = create("UIScale", {
+        Scale = 0.94,
     }, notification)
 
-    create("UIListLayout", {
-        Padding = UDim.new(0, 4),
-        SortOrder = Enum.SortOrder.LayoutOrder,
+    local accent = create("Frame", {
+        Name = "Accent",
+        Position = UDim2.fromOffset(0, 8),
+        Size = UDim2.new(0, 3, 1, -16),
+        BackgroundColor3 = options.Color or THEME.Accent,
+        BackgroundTransparency = 0.05,
+        BorderSizePixel = 0,
+        ZIndex = 202,
     }, notification)
+    addCorner(accent, 2)
+
+    local contentRoot = create("Frame", {
+        Name = "ContentRoot",
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        ZIndex = 202,
+    }, notification)
+
+    create("UIPadding", {
+        PaddingTop = UDim.new(0, 12),
+        PaddingBottom = UDim.new(0, 12),
+        PaddingLeft = UDim.new(0, 16),
+        PaddingRight = UDim.new(0, 14),
+    }, contentRoot)
+
+    create("UIListLayout", {
+        Padding = UDim.new(0, 5),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, contentRoot)
 
     local titleLabel = create("TextLabel", {
         Name = "Title",
-        Size = UDim2.new(1, 0, 0, 17),
+        Size = UDim2.new(1, 0, 0, 19),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = title,
         TextColor3 = THEME.Text,
         TextTransparency = 1,
-        TextSize = 12,
+        TextSize = 14,
         TextXAlignment = Enum.TextXAlignment.Left,
         LayoutOrder = 1,
         ZIndex = 202,
-    }, notification)
+    }, contentRoot)
 
     local contentLabel = create("TextLabel", {
         Name = "Content",
@@ -1401,23 +1445,25 @@ function WindowMethods:Notify(options)
         Text = content,
         TextColor3 = THEME.SubText,
         TextTransparency = 1,
-        TextSize = 10,
+        TextSize = 12,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
+        LineHeight = 1.06,
         LayoutOrder = 2,
         ZIndex = 202,
-    }, notification)
+    }, contentRoot)
 
     task.defer(function()
         if not notification.Parent then
             return
         end
-        tween(notification, {BackgroundTransparency = STYLE.Acrylic})
-        tween(titleLabel, {TextTransparency = 0})
-        tween(contentLabel, {TextTransparency = 0})
+        tweenWithInfo(notification, STYLE.NotificationTween, {BackgroundTransparency = STYLE.Acrylic})
+        tweenWithInfo(notificationScale, STYLE.NotificationTween, {Scale = 1})
+        tweenWithInfo(titleLabel, STYLE.NotificationTween, {TextTransparency = 0})
+        tweenWithInfo(contentLabel, STYLE.NotificationTween, {TextTransparency = 0})
         if stroke then
-            tween(stroke, {Transparency = STYLE.Stroke})
+            tweenWithInfo(stroke, STYLE.NotificationTween, {Transparency = STYLE.Stroke})
         end
     end)
 
@@ -1425,13 +1471,14 @@ function WindowMethods:Notify(options)
         if not notification.Parent then
             return
         end
-        tween(notification, {BackgroundTransparency = 1})
-        tween(titleLabel, {TextTransparency = 1})
-        tween(contentLabel, {TextTransparency = 1})
+        tweenWithInfo(notification, STYLE.PanelTweenOut, {BackgroundTransparency = 1})
+        tweenWithInfo(notificationScale, STYLE.PanelTweenOut, {Scale = 0.96})
+        tweenWithInfo(titleLabel, STYLE.PanelTweenOut, {TextTransparency = 1})
+        tweenWithInfo(contentLabel, STYLE.PanelTweenOut, {TextTransparency = 1})
         if stroke then
-            tween(stroke, {Transparency = 1})
+            tweenWithInfo(stroke, STYLE.PanelTweenOut, {Transparency = 1})
         end
-        task.delay(0.20, function()
+        task.delay(0.18, function()
             destroy(notification)
         end)
     end)
@@ -1488,11 +1535,13 @@ local function createIconSearch(parent)
 end
 
 local function createFloatingPanel(window, name, title, size)
+    local baseWidth = size and size.X.Offset or 360
+    local baseHeight = size and size.Y.Offset or 180
     local panel = create("Frame", {
         Name = name,
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, 8 + FLOATING_PANEL_OFFSET),
-        Size = size or UDim2.fromOffset(360, 180),
+        Size = UDim2.fromOffset(baseWidth, baseHeight),
         Visible = false,
         Active = true,
         ZIndex = 80,
@@ -1503,7 +1552,7 @@ local function createFloatingPanel(window, name, title, size)
 
     local header = create("Frame", {
         Name = "TitleBar",
-        Size = UDim2.new(1, 0, 0, 44),
+        Size = UDim2.new(1, 0, 0, 50),
         BackgroundColor3 = THEME.ButtonAlt,
         BackgroundTransparency = 0.08,
         BorderSizePixel = 0,
@@ -1513,13 +1562,13 @@ local function createFloatingPanel(window, name, title, size)
 
     create("TextLabel", {
         Name = "Title",
-        Position = UDim2.fromOffset(14, 0),
-        Size = UDim2.new(1, -60, 1, 0),
+        Position = UDim2.fromOffset(15, 0),
+        Size = UDim2.new(1, -62, 1, 0),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
         Text = title,
         TextColor3 = THEME.CategoryTitle,
-        TextSize = 12,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 82,
     }, header)
@@ -1527,32 +1576,38 @@ local function createFloatingPanel(window, name, title, size)
     local close = create("TextButton", {
         Name = "Close",
         AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.fromOffset(28, 26),
+        Position = UDim2.new(1, -12, 0.5, 0),
+        Size = UDim2.fromOffset(28, 28),
         Text = "×",
         Font = Enum.Font.GothamMedium,
-        TextSize = 16,
+        TextSize = 17,
         ZIndex = 82,
     }, header)
     styleButton(window, close)
     close.Font = Enum.Font.GothamMedium
-    close.TextSize = 16
+    close.TextSize = 17
 
     create("Frame", {
         Name = "HeaderDivider",
-        Position = UDim2.new(0, 12, 0, 44),
-        Size = UDim2.new(1, -24, 0, 1),
+        Position = UDim2.new(0, 14, 0, 49),
+        Size = UDim2.new(1, -28, 0, 1),
         BackgroundColor3 = THEME.Border,
-        BackgroundTransparency = 0.2,
+        BackgroundTransparency = 0.35,
         BorderSizePixel = 0,
         ZIndex = 81,
     }, panel)
 
     registerConnection(window, close.MouseButton1Click:Connect(function()
-        panel.Visible = false
+        if type(window._setPanelVisible) == "function" then
+            window._setPanelVisible(panel, false)
+        else
+            panel.Visible = false
+        end
     end))
 
     panel:SetAttribute("VanillaUIPanelOffset", FLOATING_PANEL_OFFSET)
+    panel:SetAttribute("VanillaUIBaseWidth", baseWidth)
+    panel:SetAttribute("VanillaUIBaseHeight", baseHeight)
     return panel
 end
 
@@ -1753,7 +1808,7 @@ function VanillaUI:CreateWindow(options)
         Name = "Notifications",
         AnchorPoint = Vector2.new(1, 1),
         Position = UDim2.new(1, -14, 1, -14),
-        Size = UDim2.fromOffset(300, 540),
+        Size = UDim2.fromOffset(NOTIFICATION_BASE_WIDTH, 540),
         BackgroundTransparency = 1,
         ZIndex = 200,
     }, screenGui)
@@ -1769,13 +1824,13 @@ function VanillaUI:CreateWindow(options)
     local searchPanel = createFloatingPanel(window, "SearchPanel", "BUSCAR CONTROLES", UDim2.fromOffset(390, 360))
     local searchBox = create("TextBox", {
         Name = "SearchBox",
-        Position = UDim2.fromOffset(12, 56),
-        Size = UDim2.new(1, -24, 0, 34),
+        Position = UDim2.fromOffset(12, 60),
+        Size = UDim2.new(1, -24, 0, 36),
         ClearTextOnFocus = false,
         PlaceholderText = "Buscar FOV, ESP, ajustes...",
         Text = "",
         Font = Enum.Font.Gotham,
-        TextSize = 11,
+        TextSize = 12,
         TextColor3 = THEME.Text,
         PlaceholderColor3 = THEME.SubText,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1783,14 +1838,14 @@ function VanillaUI:CreateWindow(options)
     }, searchPanel)
     styleSurface(searchBox, THEME.Button)
     create("UIPadding", {
-        PaddingLeft = UDim.new(0, 11),
-        PaddingRight = UDim.new(0, 11),
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 12),
     }, searchBox)
 
     local searchResults = create("ScrollingFrame", {
         Name = "Results",
-        Position = UDim2.fromOffset(12, 101),
-        Size = UDim2.new(1, -24, 1, -113),
+        Position = UDim2.fromOffset(12, 108),
+        Size = UDim2.new(1, -24, 1, -120),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -1801,35 +1856,36 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 81,
     }, searchPanel)
     create("UIListLayout", {
-        Padding = UDim.new(0, 6),
+        Padding = UDim.new(0, 7),
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, searchResults)
 
     local searchHint = create("TextLabel", {
         Name = "SearchHint",
-        Size = UDim2.new(1, 0, 0, 42),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.61, 0),
+        Size = UDim2.new(1, -44, 0, 54),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = "Escribe el nombre de una función o ajuste.",
         TextColor3 = THEME.SubText,
-        TextSize = 10,
+        TextSize = 11,
         TextWrapped = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        LayoutOrder = 1,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        TextYAlignment = Enum.TextYAlignment.Center,
         ZIndex = 82,
-    }, searchResults)
+    }, searchPanel)
 
-    local infoPanel = createFloatingPanel(window, "InfoPanel", "VANILLAUI", UDim2.fromOffset(390, 210))
+    local infoPanel = createFloatingPanel(window, "InfoPanel", "VANILLAUI", UDim2.fromOffset(390, 220))
     create("TextLabel", {
         Name = "Info",
-        Position = UDim2.fromOffset(14, 58),
-        Size = UDim2.new(1, -28, 1, -72),
+        Position = UDim2.fromOffset(15, 62),
+        Size = UDim2.new(1, -30, 1, -78),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = window.Title .. "\n" .. window.Subtitle .. "\n\nVanillaUI " .. VanillaUI.Version .. "\nEntorno privado de Vanilla Lattice.\nDiscord: " .. DISCORD_INVITE,
         TextColor3 = THEME.SubText,
-        TextSize = 11,
+        TextSize = 12,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
@@ -1837,66 +1893,188 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 81,
     }, infoPanel)
 
-    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "AJUSTES DE VANILLAUI", UDim2.fromOffset(390, 224))
+    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "AJUSTES DE VANILLAUI", UDim2.fromOffset(304, 310))
+    local settingsHeader = settingsPanel:FindFirstChild("TitleBar")
+    local settingsTitle = settingsHeader and settingsHeader:FindFirstChild("Title")
+    if settingsTitle then
+        settingsTitle.Position = UDim2.fromOffset(16, 7)
+        settingsTitle.Size = UDim2.new(1, -64, 0, 20)
+        settingsTitle.TextSize = 13
+    end
     create("TextLabel", {
-        Name = "SettingsInfo",
-        Position = UDim2.fromOffset(14, 56),
-        Size = UDim2.new(1, -28, 0, 18),
+        Name = "Subtitle",
+        Position = UDim2.fromOffset(16, 28),
+        Size = UDim2.new(1, -64, 0, 14),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
-        Text = "ESCALA DE INTERFAZ",
+        Text = string.upper(window.Title) .. " · V" .. VanillaUI.Version,
         TextColor3 = THEME.SubText,
-        TextSize = 10,
+        TextTransparency = 0.18,
+        TextSize = 9,
         TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 81,
-    }, settingsPanel)
-
-    local scaleHolder = create("Frame", {
-        Position = UDim2.fromOffset(14, 82),
-        Size = UDim2.new(1, -28, 0, 32),
-        BackgroundTransparency = 1,
-        ZIndex = 81,
-    }, settingsPanel)
-    create("UIGridLayout", {
-        CellPadding = UDim2.fromOffset(6, 0),
-        CellSize = UDim2.new(0.25, -5, 1, 0),
-        FillDirection = Enum.FillDirection.Horizontal,
-        FillDirectionMaxCells = 4,
-        HorizontalAlignment = Enum.HorizontalAlignment.Center,
-        VerticalAlignment = Enum.VerticalAlignment.Center,
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, scaleHolder)
-
-    create("Frame", {
-        Position = UDim2.fromOffset(14, 128),
-        Size = UDim2.new(1, -28, 0, 1),
-        BackgroundColor3 = THEME.Border,
-        BackgroundTransparency = 0.18,
-        BorderSizePixel = 0,
-        ZIndex = 81,
-    }, settingsPanel)
-
-    local discordButton = create("TextButton", {
-        Name = "DiscordButton",
-        Position = UDim2.fromOffset(14, 143),
-        Size = UDim2.new(1, -28, 0, 32),
-        Text = "DISCORD · COPIAR INVITACIÓN",
-        Font = Enum.Font.GothamMedium,
-        TextSize = 11,
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        AutoButtonColor = false,
         ZIndex = 82,
+    }, settingsHeader or settingsPanel)
+
+    local settingsContent = create("ScrollingFrame", {
+        Name = "Content",
+        Position = UDim2.fromOffset(12, 60),
+        Size = UDim2.new(1, -24, 1, -72),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(),
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = THEME.Accent,
+        ScrollBarImageTransparency = 0.55,
+        ZIndex = 81,
     }, settingsPanel)
-    styleSurface(discordButton, DISCORD_BLURPLE)
+    create("UIListLayout", {
+        Padding = UDim.new(0, 7),
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, settingsContent)
+
+    local function createSettingsButton(name, order, text, background)
+        local button = create("TextButton", {
+            Name = name,
+            Size = UDim2.new(1, 0, 0, 34),
+            LayoutOrder = order,
+            Text = text,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextWrapped = true,
+            TextSize = 12,
+            ZIndex = 82,
+        }, settingsContent)
+        styleButton(window, button)
+        create("UIPadding", {
+            PaddingLeft = UDim.new(0, 12),
+            PaddingRight = UDim.new(0, 12),
+        }, button)
+        if background then
+            button.BackgroundColor3 = background
+        end
+        return button
+    end
+
+    local scaleButton = createSettingsButton("ScaleButton", 1, "Escala de interfaz: 100%")
+    local responsiveButton = createSettingsButton("ResponsiveButton", 2, "Adaptación de pantalla: Automática")
+    local resetLayoutButton = createSettingsButton("ResetLayoutButton", 3, "Restablecer posición de la interfaz")
+    local testNotificationButton = createSettingsButton("TestNotificationButton", 4, "Probar notificación")
+    local discordButton = createSettingsButton("DiscordButton", 5, "Discord", DISCORD_BLURPLE)
+    discordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     discordButton.BackgroundColor3 = DISCORD_BLURPLE
     discordButton.BackgroundTransparency = 0.02
 
     registerConnection(window, discordButton.MouseEnter:Connect(function()
-        tween(discordButton, {BackgroundColor3 = DISCORD_BLURPLE_HOVER})
+        tween(discordButton, {
+            BackgroundColor3 = DISCORD_BLURPLE_HOVER,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+        })
     end))
     registerConnection(window, discordButton.MouseLeave:Connect(function()
-        tween(discordButton, {BackgroundColor3 = DISCORD_BLURPLE})
+        tween(discordButton, {
+            BackgroundColor3 = DISCORD_BLURPLE,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+        })
     end))
+
+    local userScaleValue = 1
+    local responsiveScaleValue = 1
+    local combinedScaleValue = 1
+    local scaleObjects = {}
+    local scaleOptions = {0.85, 0.90, 1.00, 1.10, 1.20}
+
+    local function refreshScaleText()
+        if scaleButton and scaleButton.Parent then
+            scaleButton.Text = string.format("Escala de interfaz: %d%%", math.floor(userScaleValue * 100 + 0.5))
+        end
+    end
+
+    local function applyScaleValues()
+        combinedScaleValue = math.clamp(userScaleValue * responsiveScaleValue, MIN_RESPONSIVE_SCALE, 1.25)
+        window.CombinedScale = combinedScaleValue
+        for _, scaleObject in ipairs(scaleObjects) do
+            if scaleObject and scaleObject.Parent then
+                scaleObject.Scale = combinedScaleValue
+            end
+        end
+        refreshScaleText()
+        if type(window._syncDockPositions) == "function" then
+            task.defer(window._syncDockPositions)
+        end
+    end
+
+    local function attachScale(target)
+        local scaleObject = create("UIScale", {Scale = combinedScaleValue}, target)
+        scaleObjects[#scaleObjects + 1] = scaleObject
+        return scaleObject
+    end
+
+    for _, target in ipairs({mainBar, mainContainer, notificationHolder, searchPanel, infoPanel, settingsPanel}) do
+        attachScale(target)
+    end
+
+    local uiScale = setmetatable({}, {
+        __index = function(_, key)
+            if key == "Scale" then
+                return userScaleValue
+            end
+        end,
+        __newindex = function(_, key, value)
+            if key ~= "Scale" then
+                rawset(_, key, value)
+                return
+            end
+            userScaleValue = math.clamp(tonumber(value) or 1, 0.85, 1.20)
+            applyScaleValues()
+            if type(window._updateResponsiveSize) == "function" then
+                task.defer(window._updateResponsiveSize)
+            end
+        end,
+    })
+    window.UIScale = uiScale
+    window.SettingsPanel = settingsPanel
+    window.SettingsContent = settingsContent
+
+    registerConnection(window, scaleButton.MouseButton1Click:Connect(function()
+        local closestIndex = 1
+        local closestDistance = math.huge
+        for index, value in ipairs(scaleOptions) do
+            local distance = math.abs(value - userScaleValue)
+            if distance < closestDistance then
+                closestDistance = distance
+                closestIndex = index
+            end
+        end
+        local nextIndex = closestIndex % #scaleOptions + 1
+        uiScale.Scale = scaleOptions[nextIndex]
+    end))
+
+    registerConnection(window, responsiveButton.MouseButton1Click:Connect(function()
+        if type(window._updateResponsiveSize) == "function" then
+            window._updateResponsiveSize()
+        end
+        window:Notify({
+            Title = "VanillaUI",
+            Content = "La interfaz se adaptó a la resolución actual.",
+            Duration = 2,
+        })
+    end))
+
+    registerConnection(window, resetLayoutButton.MouseButton1Click:Connect(function()
+        if type(window._resetDockPosition) == "function" then
+            window._resetDockPosition()
+        end
+    end))
+
+    registerConnection(window, testNotificationButton.MouseButton1Click:Connect(function()
+        window:Notify({
+            Title = "VanillaUI",
+            Content = "Notificación de prueba. El texto usa el tamaño legible predeterminado.",
+            Duration = 2,
+        })
+    end))
+
     registerConnection(window, discordButton.MouseButton1Click:Connect(function()
         local copied = false
         for _, functionName in ipairs({"setclipboard", "toclipboard"}) do
@@ -1909,83 +2087,22 @@ function VanillaUI:CreateWindow(options)
                 end
             end
         end
-
         window:Notify({
             Title = "Discord",
             Content = copied and "Invitación copiada al portapapeles." or DISCORD_INVITE,
             Duration = 3,
+            Color = DISCORD_BLURPLE,
         })
     end))
 
-    local scaleValue = 1
-    local scaleObjects = {}
-    local scaleButtonEntries = {}
-    local function refreshScaleButtons()
-        for _, entry in ipairs(scaleButtonEntries) do
-            entry.Refresh(false)
-        end
-    end
+    applyScaleValues()
 
-    local function attachScale(target)
-        local scaleObject = create("UIScale", {Scale = scaleValue}, target)
-        scaleObjects[#scaleObjects + 1] = scaleObject
-        return scaleObject
-    end
-
-    for _, target in ipairs({mainBar, mainContainer, notificationHolder, searchPanel, infoPanel, settingsPanel}) do
-        attachScale(target)
-    end
-
-    local uiScale = setmetatable({}, {
-        __index = function(_, key)
-            if key == "Scale" then
-                return scaleValue
-            end
-        end,
-        __newindex = function(_, key, value)
-            if key ~= "Scale" then
-                rawset(_, key, value)
-                return
-            end
-            scaleValue = math.clamp(tonumber(value) or 1, 0.65, 1.25)
-            for _, scaleObject in ipairs(scaleObjects) do
-                if scaleObject and scaleObject.Parent then
-                    scaleObject.Scale = scaleValue
-                end
-            end
-            refreshScaleButtons()
-        end,
-    })
-    window.UIScale = uiScale
-
-    for index, scale in ipairs({0.8, 0.9, 1.0, 1.1}) do
-        local targetScale = scale
-        local scaleButton = create("TextButton", {
-            Size = UDim2.fromScale(1, 1),
-            LayoutOrder = index,
-            Text = tostring(math.floor(targetScale * 100)) .. "%",
-            ZIndex = 82,
-        }, scaleHolder)
-        local refresh = styleButton(window, scaleButton, function()
-            return math.abs(uiScale.Scale - targetScale) < 0.01
-        end)
-        scaleButtonEntries[#scaleButtonEntries + 1] = {
-            Button = scaleButton,
-            Refresh = refresh,
-            Scale = targetScale,
-        }
-        registerConnection(window, scaleButton.MouseButton1Click:Connect(function()
-            uiScale.Scale = targetScale
-        end))
-    end
-    refreshScaleButtons()
-
-    local helpPanel = createFloatingPanel(window, "HelpPanel", "AYUDA", UDim2.fromOffset(430, 270))
+    local helpPanel = createFloatingPanel(window, "HelpPanel", "AYUDA", UDim2.fromOffset(430, 290))
     attachScale(helpPanel)
     create("TextLabel", {
         Name = "Help",
-        Position = UDim2.fromOffset(14, 58),
-        Size = UDim2.new(1, -28, 1, -72),
+        Position = UDim2.fromOffset(15, 62),
+        Size = UDim2.new(1, -30, 1, -78),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = table.concat({
@@ -2000,7 +2117,7 @@ function VanillaUI:CreateWindow(options)
             "CreateDropdown, CreateParagraph y Notify.",
         }, "\n"),
         TextColor3 = THEME.SubText,
-        TextSize = 11,
+        TextSize = 12,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
@@ -2010,10 +2127,60 @@ function VanillaUI:CreateWindow(options)
 
     local floatingPanels = {searchPanel, infoPanel, settingsPanel, helpPanel}
 
+    local panelAnimationTokens = setmetatable({}, {__mode = "k"})
+
+    local function setPanelVisible(panel, visible, animate)
+        if not panel or not panel.Parent then
+            return
+        end
+        panelAnimationTokens[panel] = (panelAnimationTokens[panel] or 0) + 1
+        local token = panelAnimationTokens[panel]
+        local shouldAnimate = animate ~= false
+
+        if visible then
+            local targetPosition = panel.Position
+            panel.Visible = true
+            if shouldAnimate then
+                panel.Position = targetPosition + UDim2.fromOffset(0, 8)
+                panel.BackgroundTransparency = 0.22
+                tweenWithInfo(panel, STYLE.PanelTween, {
+                    Position = targetPosition,
+                    BackgroundTransparency = 0.04,
+                })
+            else
+                panel.BackgroundTransparency = 0.04
+            end
+            return
+        end
+
+        if not panel.Visible then
+            return
+        end
+        if not shouldAnimate then
+            panel.Visible = false
+            panel.BackgroundTransparency = 0.04
+            return
+        end
+
+        local originalPosition = panel.Position
+        tweenWithInfo(panel, STYLE.PanelTweenOut, {
+            Position = originalPosition + UDim2.fromOffset(0, 6),
+            BackgroundTransparency = 0.20,
+        })
+        task.delay(0.14, function()
+            if panel.Parent and panelAnimationTokens[panel] == token then
+                panel.Visible = false
+                panel.Position = originalPosition
+                panel.BackgroundTransparency = 0.04
+            end
+        end)
+    end
+    window._setPanelVisible = setPanelVisible
+
     local function hideFloatingPanels(except)
         for _, panel in ipairs(floatingPanels) do
-            if panel ~= except then
-                panel.Visible = false
+            if panel ~= except and panel.Visible then
+                setPanelVisible(panel, false)
             end
         end
     end
@@ -2021,7 +2188,7 @@ function VanillaUI:CreateWindow(options)
     local function togglePanel(panel)
         local newState = not panel.Visible
         hideFloatingPanels(panel)
-        panel.Visible = newState
+        setPanelVisible(panel, newState)
     end
 
     local searchConnections = {}
@@ -2104,12 +2271,12 @@ function VanillaUI:CreateWindow(options)
     local function createSearchSectionLabel(text, order)
         local label = create("TextLabel", {
             Name = "SearchSection",
-            Size = UDim2.new(1, -2, 0, 20),
+            Size = UDim2.new(1, -2, 0, 22),
             BackgroundTransparency = 1,
             Font = Enum.Font.GothamBold,
             Text = string.upper(text),
             TextColor3 = THEME.Accent,
-            TextSize = 9,
+            TextSize = 10,
             TextXAlignment = Enum.TextXAlignment.Left,
             LayoutOrder = order,
             ZIndex = 82,
@@ -2120,16 +2287,11 @@ function VanillaUI:CreateWindow(options)
     local function createSearchResultButton(element, order)
         local resultButton = create("TextButton", {
             Name = "SearchResult",
-            Size = UDim2.new(1, -2, 0, 32),
+            Size = UDim2.new(1, -2, 0, 44),
             BackgroundColor3 = THEME.Button,
             BackgroundTransparency = STYLE.Acrylic,
             BorderSizePixel = 0,
-            Font = Enum.Font.Gotham,
-            Text = element.Title,
-            TextColor3 = THEME.Text,
-            TextSize = 10,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
+            Text = "",
             AutoButtonColor = false,
             LayoutOrder = order,
             ZIndex = 82,
@@ -2137,25 +2299,55 @@ function VanillaUI:CreateWindow(options)
         resultButton:SetAttribute("SearchGenerated", true)
         addCorner(resultButton, STYLE.Corner)
         local stroke = addStroke(resultButton, THEME.Border, STYLE.Stroke)
-        create("UIPadding", {
-            PaddingLeft = UDim.new(0, 10),
-            PaddingRight = UDim.new(0, 10),
+
+        local titleLabel = create("TextLabel", {
+            Name = "Title",
+            Position = UDim2.fromOffset(11, 5),
+            Size = UDim2.new(1, -22, 0, 18),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamMedium,
+            Text = element.Title,
+            TextColor3 = THEME.Text,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 83,
+        }, resultButton)
+
+        local pathText = table.concat({
+            element.Tab and element.Tab.Title or "VANILLAUI",
+            element.Section and element.Section.Title or element.Type or "CONTROL",
+        }, " · ")
+        local pathLabel = create("TextLabel", {
+            Name = "Path",
+            Position = UDim2.fromOffset(11, 24),
+            Size = UDim2.new(1, -22, 0, 14),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            Text = pathText,
+            TextColor3 = THEME.SubText,
+            TextSize = 10,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ZIndex = 83,
         }, resultButton)
 
         searchConnections[#searchConnections + 1] = resultButton.MouseEnter:Connect(function()
             tween(resultButton, {
                 BackgroundColor3 = THEME.Hover,
                 BackgroundTransparency = STYLE.AcrylicHover,
-                TextColor3 = THEME.SubText,
             })
+            tween(titleLabel, {TextColor3 = THEME.CategoryTitle})
+            tween(pathLabel, {TextColor3 = THEME.Text})
             tween(stroke, {Transparency = STYLE.StrokeHover})
         end)
         searchConnections[#searchConnections + 1] = resultButton.MouseLeave:Connect(function()
             tween(resultButton, {
                 BackgroundColor3 = THEME.Button,
                 BackgroundTransparency = STYLE.Acrylic,
-                TextColor3 = THEME.Text,
             })
+            tween(titleLabel, {TextColor3 = THEME.Text})
+            tween(pathLabel, {TextColor3 = THEME.SubText})
             tween(stroke, {Transparency = STYLE.Stroke})
         end)
         searchConnections[#searchConnections + 1] = resultButton.MouseButton1Click:Connect(function()
@@ -2169,6 +2361,7 @@ function VanillaUI:CreateWindow(options)
         end
 
         clearSearchResults()
+        window._firstSearchMatch = nil
         local terms = expandSearchTerms(searchBox.Text)
         if #terms == 0 then
             searchHint.Visible = true
@@ -2195,6 +2388,7 @@ function VanillaUI:CreateWindow(options)
             return aTab < bTab
         end)
 
+        window._firstSearchMatch = matches[1]
         searchHint.Visible = #matches == 0
         searchHint.Text = "No se encontraron controles."
 
@@ -2247,16 +2441,85 @@ function VanillaUI:CreateWindow(options)
         togglePanel(helpPanel)
     end))
     registerConnection(window, searchBox:GetPropertyChangedSignal("Text"):Connect(refreshSearchResults))
+    registerConnection(window, searchBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed and window._firstSearchMatch then
+            focusSearchTarget(window._firstSearchMatch)
+        end
+    end))
 
     local dragging = false
     local dragStart
-    local startPosition
+    local dragStartCenter
+
+    local function currentViewport()
+        local camera = Workspace.CurrentCamera
+        return camera and camera.ViewportSize or Vector2.new(1280, 720)
+    end
+
+    local function clampDockCenter(centerX, topY)
+        local viewport = currentViewport()
+        local scale = window.CombinedScale or 1
+        local halfWidth = math.max(1, 430 * scale * 0.5)
+        local barHeight = math.max(1, 40 * scale)
+        centerX = math.clamp(centerX, halfWidth + 8, math.max(halfWidth + 8, viewport.X - halfWidth - 8))
+        topY = math.clamp(topY, 8, math.max(8, viewport.Y - barHeight - 8))
+        return centerX, topY
+    end
+
+    local function syncDockPositions()
+        if window.Destroyed then
+            return
+        end
+        local scale = window.CombinedScale or 1
+        local barPosition = mainBar.Position
+        local containerOffset = math.floor(50 * scale + 0.5)
+        local panelOffset = math.floor(FLOATING_PANEL_OFFSET * scale + 0.5)
+        mainContainer.Position = UDim2.new(
+            barPosition.X.Scale,
+            barPosition.X.Offset,
+            barPosition.Y.Scale,
+            barPosition.Y.Offset + containerOffset
+        )
+
+        local viewport = currentViewport()
+        for _, panel in ipairs(floatingPanels) do
+            local panelHeight = (panel:GetAttribute("VanillaUIBaseHeight") or panel.Size.Y.Offset) * scale
+            local targetY = barPosition.Y.Offset + panelOffset
+            if barPosition.Y.Scale ~= 0 then
+                targetY = mainBar.AbsolutePosition.Y + panelOffset
+            end
+            if targetY + panelHeight > viewport.Y - 8 then
+                targetY = math.max(8, mainBar.AbsolutePosition.Y - panelHeight - 8)
+                panel.Position = UDim2.fromOffset(
+                    mainBar.AbsolutePosition.X + mainBar.AbsoluteSize.X * 0.5,
+                    targetY
+                )
+            else
+                panel.Position = UDim2.new(
+                    barPosition.X.Scale,
+                    barPosition.X.Offset,
+                    barPosition.Y.Scale,
+                    barPosition.Y.Offset + panelOffset
+                )
+            end
+        end
+    end
+    window._syncDockPositions = syncDockPositions
+
+    local function resetDockPosition()
+        mainBar.Position = UDim2.new(0.5, 0, 0, 8)
+        syncDockPositions()
+    end
+    window._resetDockPosition = resetDockPosition
 
     registerConnection(window, mainBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
-            startPosition = mainBar.Position
+            dragStartCenter = Vector2.new(
+                mainBar.AbsolutePosition.X + mainBar.AbsoluteSize.X * 0.5,
+                mainBar.AbsolutePosition.Y
+            )
         end
     end))
 
@@ -2266,26 +2529,12 @@ function VanillaUI:CreateWindow(options)
         end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             local delta = input.Position - dragStart
-            mainBar.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
+            local centerX, topY = clampDockCenter(
+                dragStartCenter.X + delta.X,
+                dragStartCenter.Y + delta.Y
             )
-            mainContainer.Position = UDim2.new(
-                mainBar.Position.X.Scale,
-                mainBar.Position.X.Offset,
-                mainBar.Position.Y.Scale,
-                mainBar.Position.Y.Offset + 50
-            )
-            for _, panel in ipairs(floatingPanels) do
-                panel.Position = UDim2.new(
-                    mainBar.Position.X.Scale,
-                    mainBar.Position.X.Offset,
-                    mainBar.Position.Y.Scale,
-                    mainBar.Position.Y.Offset + FLOATING_PANEL_OFFSET
-                )
-            end
+            mainBar.Position = UDim2.fromOffset(centerX, topY)
+            syncDockPositions()
         end
     end))
 
@@ -2309,23 +2558,78 @@ function VanillaUI:CreateWindow(options)
         if not camera then
             return
         end
-        local viewport = camera.ViewportSize
-        local width = math.clamp(viewport.X - 30, 320, 1200)
-        local height = math.clamp(viewport.Y - 105, 260, 700)
-        mainContainer.Size = UDim2.fromOffset(width, height)
 
-        if viewport.X < 560 then
-            uiScale.Scale = math.min(uiScale.Scale, 0.8)
+        local viewport = camera.ViewportSize
+        local breakpointScale = 1
+        if viewport.X < 420 then
+            breakpointScale = 0.78
+        elseif viewport.X < 640 then
+            breakpointScale = 0.88
+        elseif viewport.X < 900 then
+            breakpointScale = 0.95
         end
+        if viewport.Y < 420 then
+            breakpointScale = math.min(breakpointScale, 0.90)
+        elseif viewport.Y < 560 then
+            breakpointScale = math.min(breakpointScale, 0.95)
+        end
+
+        local widthFit = math.max(MIN_RESPONSIVE_SCALE, (viewport.X - 16) / 430)
+        local desiredCombined = math.min(userScaleValue * breakpointScale, widthFit, 1.25)
+        responsiveScaleValue = math.clamp(desiredCombined / math.max(userScaleValue, 0.01), 0.60, 1)
+        applyScaleValues()
+
+        local combined = window.CombinedScale or 1
+        local safeWidth = math.max(300, viewport.X - 24)
+        local safeHeight = math.max(230, viewport.Y - math.floor(76 * combined))
+        local logicalWidth = math.clamp(math.floor(safeWidth / combined), 320, 1200)
+        local logicalHeight = math.clamp(math.floor(safeHeight / combined), 260, 700)
+        mainContainer.Size = UDim2.fromOffset(logicalWidth, logicalHeight)
+
+        local holderWidth = math.min(NOTIFICATION_BASE_WIDTH, math.max(260, math.floor((viewport.X - 24) / combined)))
+        local holderHeight = math.max(220, math.floor((viewport.Y - 28) / combined))
+        notificationHolder.Size = UDim2.fromOffset(holderWidth, holderHeight)
+        notificationHolder.Position = UDim2.new(1, -14, 1, -14)
+
+        for _, panel in ipairs(floatingPanels) do
+            local baseWidth = panel:GetAttribute("VanillaUIBaseWidth") or panel.Size.X.Offset
+            local baseHeight = panel:GetAttribute("VanillaUIBaseHeight") or panel.Size.Y.Offset
+            local maxWidth = math.max(260, math.floor((viewport.X - 24) / combined))
+            local maxHeight = math.max(180, math.floor((viewport.Y - 86) / combined))
+            panel.Size = UDim2.fromOffset(math.min(baseWidth, maxWidth), math.min(baseHeight, maxHeight))
+        end
+
+        task.defer(function()
+            if window.Destroyed then
+                return
+            end
+            local centerX = mainBar.AbsoluteSize.X > 0
+                and (mainBar.AbsolutePosition.X + mainBar.AbsoluteSize.X * 0.5)
+                or (viewport.X * 0.5)
+            local topY = mainBar.AbsoluteSize.Y > 0 and mainBar.AbsolutePosition.Y or 8
+            centerX, topY = clampDockCenter(centerX, topY)
+            mainBar.Position = UDim2.fromOffset(centerX, topY)
+            syncDockPositions()
+        end)
     end
+    window._updateResponsiveSize = updateResponsiveSize
 
     updateResponsiveSize()
-    if CurrentCamera then
-        registerConnection(window, CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveSize))
+
+    local cameraViewportConnection
+    local function bindCamera(camera)
+        disconnect(cameraViewportConnection)
+        if camera then
+            cameraViewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveSize)
+            window._connections[#window._connections + 1] = cameraViewportConnection
+        end
+        updateResponsiveSize()
     end
+
+    bindCamera(Workspace.CurrentCamera)
     registerConnection(window, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
         CurrentCamera = Workspace.CurrentCamera
-        updateResponsiveSize()
+        bindCamera(CurrentCamera)
     end))
 
     window._cleanupFunction = function()

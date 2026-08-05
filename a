@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.7.1
+    VanillaUI v0.7.2
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.7.1",
+    Version = "0.7.2",
     Flags = {},
 }
 
@@ -32,7 +32,7 @@ local NOTIFICATION_EXTRA_DURATION = 2
 local SEARCH_DEBOUNCE = 0.06
 local DEFAULT_TEXT_SIZE = 15
 local DEFAULT_DESCRIPTION_SIZE = 12
-local DEFAULT_NOTIFICATION_WIDTH = 380
+local DEFAULT_NOTIFICATION_WIDTH = 340
 local DEFAULT_RESPONSIVE_RULES = {
     Wide = 1100,
     Compact = 760,
@@ -120,6 +120,9 @@ local BUILTIN_TRANSLATIONS = {
         ["Keybind, ColorPicker, Stat, Paragraph, Label and Divider."] = "Keybind, ColorPicker, Stat, Paragraph, Label y Divider.",
         ["All controls support handles, flags and reordering."] = "Todos los controles admiten handles, flags y reordenamiento.",
         ["Activity center"] = "CENTRO DE ACTIVIDAD",
+        ["Activity history"] = "Historial de actividad",
+        ["Show history"] = "Mostrar historial",
+        ["Hide history"] = "Ocultar historial",
         ["No recent activity."] = "No hay actividad reciente.",
         ["Clear history"] = "Borrar historial",
         ["Recent activity"] = "Actividad reciente",
@@ -186,6 +189,9 @@ local BUILTIN_TRANSLATIONS = {
         ["SECTION"] = "SEÇÃO",
         ["Private Vanilla Lattice environment."] = "Ambiente privado da Vanilla Lattice.",
         ["Activity center"] = "CENTRO DE ATIVIDADE",
+        ["Activity history"] = "Histórico de atividade",
+        ["Show history"] = "Mostrar histórico",
+        ["Hide history"] = "Ocultar histórico",
         ["No recent activity."] = "Nenhuma atividade recente.",
         ["Clear history"] = "Limpar histórico",
         ["Recent activity"] = "Atividade recente",
@@ -1063,7 +1069,8 @@ function WindowMethods:LogActivity(options)
     if type(self._renderActivity) == "function" then
         self:_renderActivity(entry)
     end
-    if not (self.ActivityPanel and self.ActivityPanel.Visible) then
+    local immersive = self._immersive
+    if not (immersive and immersive.ActivityHistoryExpanded) then
         self.UnreadActivities = (self.UnreadActivities or 0) + 1
     end
     if type(self._refreshActivityBadge) == "function" then
@@ -2114,9 +2121,13 @@ function SectionMethods:CreateDropdown(options)
     function element:SetOpen(open)
         local wasOpen = self.Open == true
         self.Open = open == true
-        self.Choices.Visible = self.Open
-        if self.SearchBox then
-            self.SearchBox.Visible = self.Open
+        local animationToken = (self.Object:GetAttribute("VanillaUIAnimationToken") or 0) + 1
+        self.Object:SetAttribute("VanillaUIAnimationToken", animationToken)
+        if self.Open then
+            self.Choices.Visible = true
+            if self.SearchBox then
+                self.SearchBox.Visible = true
+            end
         end
         local visibleCount = 0
         for _, entry in pairs(self.OptionButtons) do
@@ -2131,6 +2142,18 @@ function SectionMethods:CreateDropdown(options)
             target = self.ChoicesY + contentHeight
         end
         tween(self.Object, {Size = UDim2.new(1, 0, 0, target)})
+        if not self.Open then
+            task.delay(STYLE.Tween.Time, function()
+                if self.Object and self.Object.Parent
+                    and self.Object:GetAttribute("VanillaUIAnimationToken") == animationToken
+                    and not self.Open then
+                    self.Choices.Visible = false
+                    if self.SearchBox then
+                        self.SearchBox.Visible = false
+                    end
+                end
+            end)
+        end
         if self.Open and not wasOpen then
             self.Window:_playSound("Open")
             self.Window:_beginFocus(self.Object, function()
@@ -4173,7 +4196,7 @@ local function createIconSearch(parent)
 end
 
 local function createFloatingPanel(window, name, title, size)
-    local panel = create("Frame", {
+    local panel = create("CanvasGroup", {
         Name = name,
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET + FLOATING_PANEL_OFFSET),
@@ -4182,6 +4205,7 @@ local function createFloatingPanel(window, name, title, size)
         Active = true,
         ZIndex = 80,
         BackgroundTransparency = 0.04,
+        GroupTransparency = 0,
     }, window.ScreenGui)
     styleSurface(panel, THEME.Background, STYLE.MainCorner)
     panel.BackgroundTransparency = 0.04
@@ -4460,7 +4484,7 @@ function VanillaUI:CreateWindow(options)
         Title = tostring(option(options, {"title", "Title", "name", "Name"}, "VanillaUI")),
         Subtitle = tostring(option(options, {"subtitle", "Subtitle", "LoadingSubtitle"}, "Vanilla Lattice")),
         ToggleKey = normalizeKey(option(options, {"toggleKey", "ToggleKey", "ToggleUIKeybind"}, Enum.KeyCode.Delete), Enum.KeyCode.Delete),
-        TabWidth = math.clamp(tonumber(option(options, {"tabWidth", "TabWidth", "categoryWidth", "CategoryWidth"}, 205)) or 205, 170, 300),
+        TabWidth = math.clamp(tonumber(option(options, {"tabWidth", "TabWidth", "categoryWidth", "CategoryWidth"}, 180)) or 180, 155, 250),
         Visible = true,
         MenuVisible = option(options, {"menuVisible", "MenuVisible"}, true) ~= false,
         AutoScale = option(options, {"autoScale", "AutoScale", "responsive", "Responsive"}, true) ~= false,
@@ -4566,7 +4590,7 @@ function VanillaUI:CreateWindow(options)
         Name = "MainBar",
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET),
-        Size = UDim2.fromOffset(0, 40),
+        Size = UDim2.fromOffset(0, 36),
         AutomaticSize = Enum.AutomaticSize.X,
         BackgroundTransparency = 1,
         Active = true,
@@ -4579,13 +4603,13 @@ function VanillaUI:CreateWindow(options)
         FillDirection = Enum.FillDirection.Horizontal,
         HorizontalAlignment = Enum.HorizontalAlignment.Center,
         VerticalAlignment = Enum.VerticalAlignment.Center,
-        Padding = UDim.new(0, 10),
+        Padding = UDim.new(0, 7),
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, mainBar)
 
     immersive.UserButton = create("TextButton", {
         Name = "UserButton",
-        Size = UDim2.fromOffset(160, 40),
+        Size = UDim2.fromOffset(148, 36),
         LayoutOrder = 0,
         Text = "",
         AutoButtonColor = false,
@@ -4594,8 +4618,8 @@ function VanillaUI:CreateWindow(options)
     styleSurface(immersive.UserButton, THEME.Button)
     immersive.UserAvatar = create("ImageLabel", {
         Name = "Avatar",
-        Position = UDim2.fromOffset(5, 5),
-        Size = UDim2.fromOffset(30, 30),
+        Position = UDim2.fromOffset(4, 4),
+        Size = UDim2.fromOffset(28, 28),
         BackgroundColor3 = THEME.ButtonAlt,
         BackgroundTransparency = 0.04,
         BorderSizePixel = 0,
@@ -4605,8 +4629,8 @@ function VanillaUI:CreateWindow(options)
     addCorner(immersive.UserAvatar, 7)
     addStroke(immersive.UserAvatar, THEME.Border, STYLE.Stroke)
     immersive.UserName = create("TextLabel", {
-        Position = UDim2.fromOffset(43, 4),
-        Size = UDim2.new(1, -50, 0, 18),
+        Position = UDim2.fromOffset(39, 3),
+        Size = UDim2.new(1, -45, 0, 17),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamMedium,
         Text = "",
@@ -4617,8 +4641,8 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 3,
     }, immersive.UserButton)
     immersive.UserStatus = create("TextLabel", {
-        Position = UDim2.fromOffset(43, 21),
-        Size = UDim2.new(1, -50, 0, 15),
+        Position = UDim2.fromOffset(39, 19),
+        Size = UDim2.new(1, -45, 0, 14),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = "",
@@ -4634,7 +4658,7 @@ function VanillaUI:CreateWindow(options)
 
     local legalPlusButton = create("TextButton", {
         Name = "LegalPlusButton",
-        Size = UDim2.fromOffset(40, 40),
+        Size = UDim2.fromOffset(36, 36),
         LayoutOrder = 1,
         Text = "[L+]",
         Visible = false,
@@ -4646,7 +4670,7 @@ function VanillaUI:CreateWindow(options)
 
     local menuButton = create("TextButton", {
         Name = "MenuButton",
-        Size = UDim2.fromOffset(100, 40),
+        Size = UDim2.fromOffset(88, 36),
         LayoutOrder = 2,
         Text = options.MenuText or "Menu",
     }, mainBar)
@@ -4657,7 +4681,7 @@ function VanillaUI:CreateWindow(options)
 
     immersive.MobileNavButton = create("TextButton", {
         Name = "MobileNavButton",
-        Size = UDim2.fromOffset(118, 40),
+        Size = UDim2.fromOffset(104, 36),
         LayoutOrder = 3,
         Text = "SECTIONS",
         Visible = false,
@@ -4669,7 +4693,7 @@ function VanillaUI:CreateWindow(options)
 
     local searchButton = create("TextButton", {
         Name = "SearchButton",
-        Size = UDim2.fromOffset(40, 40),
+        Size = UDim2.fromOffset(36, 36),
         LayoutOrder = 4,
         Text = "",
     }, mainBar)
@@ -4680,7 +4704,7 @@ function VanillaUI:CreateWindow(options)
 
     local infoButton = create("TextButton", {
         Name = "InfoButton",
-        Size = UDim2.fromOffset(40, 40),
+        Size = UDim2.fromOffset(36, 36),
         LayoutOrder = 5,
         Text = "",
     }, mainBar)
@@ -4709,36 +4733,27 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 4,
     }, infoIcon)
 
-    immersive.ActivityButton = create("TextButton", {
-        Name = "ActivityButton",
-        Size = UDim2.fromOffset(40, 40),
+    -- Activity history lives inside Settings. These hidden placeholders preserve
+    -- internal compatibility without adding another top-bar button.
+    immersive.ActivityButton = create("Frame", {
+        Name = "ActivityButtonPlaceholder",
+        Size = UDim2.fromOffset(0, 0),
         LayoutOrder = 6,
-        Text = "≡",
-        Font = Enum.Font.GothamBold,
-        TextSize = 18,
+        BackgroundTransparency = 1,
+        Visible = false,
     }, mainBar)
-    window._refreshActivityButton = styleButton(window, immersive.ActivityButton, function()
-        return immersive.ActivityPanel and immersive.ActivityPanel.Visible
-    end)
     immersive.ActivityBadge = create("TextLabel", {
         Name = "Unread",
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -2, 0, 2),
-        Size = UDim2.fromOffset(15, 15),
-        BackgroundColor3 = THEME.Accent,
-        BorderSizePixel = 0,
-        Font = Enum.Font.GothamBold,
+        Size = UDim2.fromOffset(0, 0),
+        BackgroundTransparency = 1,
         Text = "",
-        TextColor3 = Color3.fromRGB(20, 19, 17),
-        TextSize = 8,
         Visible = false,
-        ZIndex = 5,
     }, immersive.ActivityButton)
-    addCorner(immersive.ActivityBadge, 8)
+    window._refreshActivityButton = function() end
 
     local settingsButton = create("TextButton", {
         Name = "SettingsButton",
-        Size = UDim2.fromOffset(40, 40),
+        Size = UDim2.fromOffset(36, 36),
         LayoutOrder = 7,
         Text = "⚙",
         Font = Enum.Font.GothamMedium,
@@ -4752,7 +4767,7 @@ function VanillaUI:CreateWindow(options)
 
     local helpButton = create("TextButton", {
         Name = "HelpButton",
-        Size = UDim2.fromOffset(100, 40),
+        Size = UDim2.fromOffset(88, 36),
         LayoutOrder = 8,
         Text = options.HelpText or "Help",
     }, mainBar)
@@ -4764,8 +4779,8 @@ function VanillaUI:CreateWindow(options)
     local mainContainer = create("Frame", {
         Name = "MainContainer",
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET + 50),
-        Size = options.Size or UDim2.new(0.92, 0, 0, 500),
+        Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET + 44),
+        Size = options.Size or UDim2.fromOffset(960, 450),
         BackgroundTransparency = 1,
         ClipsDescendants = true,
         Visible = window.MenuVisible,
@@ -4795,13 +4810,13 @@ function VanillaUI:CreateWindow(options)
     create("UIPadding", {
         PaddingTop = UDim.new(0, 2),
         PaddingBottom = UDim.new(0, 6),
-        PaddingLeft = UDim.new(0, 8),
-        PaddingRight = UDim.new(0, 8),
+        PaddingLeft = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 6),
     }, tabHolder)
 
     create("UIListLayout", {
         FillDirection = Enum.FillDirection.Horizontal,
-        Padding = UDim.new(0, 10),
+        Padding = UDim.new(0, 7),
         SortOrder = Enum.SortOrder.LayoutOrder,
         HorizontalAlignment = Enum.HorizontalAlignment.Center,
         VerticalAlignment = Enum.VerticalAlignment.Top,
@@ -4824,7 +4839,7 @@ function VanillaUI:CreateWindow(options)
         VerticalAlignment = Enum.VerticalAlignment.Bottom,
     }, notificationHolder)
 
-    local searchPanel = createFloatingPanel(window, "SearchPanel", "Search controls", UDim2.fromOffset(450, 440))
+    local searchPanel = createFloatingPanel(window, "SearchPanel", "Search controls", UDim2.fromOffset(410, 390))
     window.SearchPanel = searchPanel
     local searchBox = create("TextBox", {
         Name = "SearchBox",
@@ -4932,17 +4947,17 @@ function VanillaUI:CreateWindow(options)
     end
     window.TagContainer = tagContainer or create("Frame", {Visible = false, BackgroundTransparency = 1}, infoPanel)
 
-    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "VanillaUI settings", UDim2.fromOffset(440, 430))
+    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "VanillaUI settings", UDim2.fromOffset(400, 390))
     window.SettingsPanel = settingsPanel
 
     local scaleObjects = {}
-    local userScale = math.clamp(tonumber(option(options, {"scale", "Scale"}, 1.06)) or 1.06, 0.80, 1.25)
+    local userScale = math.clamp(tonumber(option(options, {"scale", "Scale"}, 0.92)) or 0.92, 0.76, 1.18)
     local responsiveScale = 1
     local settingRefreshers = {}
     window._settingRefreshers = settingRefreshers
 
     local function applyScale()
-        local effective = math.clamp(userScale * responsiveScale, 0.76, 1.25)
+        local effective = math.clamp(userScale * responsiveScale, 0.72, 1.18)
         for _, scaleObject in ipairs(scaleObjects) do
             if scaleObject and scaleObject.Parent then
                 scaleObject.Scale = effective
@@ -4966,14 +4981,14 @@ function VanillaUI:CreateWindow(options)
     local uiScale = setmetatable({}, {
         __index = function(_, key)
             if key == "Scale" then return userScale end
-            if key == "EffectiveScale" then return math.clamp(userScale * responsiveScale, 0.76, 1.25) end
+            if key == "EffectiveScale" then return math.clamp(userScale * responsiveScale, 0.72, 1.18) end
         end,
         __newindex = function(_, key, value)
             if key ~= "Scale" then
                 rawset(_, key, value)
                 return
             end
-            userScale = math.clamp(tonumber(value) or 1.06, 0.80, 1.25)
+            userScale = math.clamp(tonumber(value) or 0.92, 0.76, 1.18)
             applyScale()
             if type(window._updateResponsiveSize) == "function" then
                 task.defer(window._updateResponsiveSize)
@@ -5049,7 +5064,7 @@ function VanillaUI:CreateWindow(options)
             refresh()
         end))
         refresh()
-        return button, valueLabel
+        return button, valueLabel, refresh
     end
 
     local scaleSteps = {0.8, 0.9, 1.0, 1.1}
@@ -5111,6 +5126,48 @@ function VanillaUI:CreateWindow(options)
         window:Notify({Title = "VanillaUI", Content = "Test notification with enlarged text.", Duration = 3})
     end)
 
+    immersive.ActivityHistoryExpanded = false
+    immersive.RefreshActivitySetting = select(3, createSettingRow("Activity history", function()
+        local count = #(window.Activities or {})
+        local label = immersive.ActivityHistoryExpanded and "Hide history" or "Show history"
+        return window:_translate(label) .. " · " .. tostring(count)
+    end, function()
+        immersive.ActivityHistoryExpanded = not immersive.ActivityHistoryExpanded
+        local history = immersive.ActivityHistory
+        if history then
+            local token = (history:GetAttribute("VanillaUIAnimationToken") or 0) + 1
+            history:SetAttribute("VanillaUIAnimationToken", token)
+            if immersive.ActivityHistoryExpanded then
+                history.Visible = true
+                history.GroupTransparency = 1
+                history.Size = UDim2.new(1, -2, 0, 0)
+                TweenService:Create(history, STYLE.TweenPanel, {
+                    GroupTransparency = 0,
+                    Size = UDim2.new(1, -2, 0, 236),
+                }):Play()
+                window.UnreadActivities = 0
+            else
+                TweenService:Create(history, STYLE.TweenPanel, {
+                    GroupTransparency = 1,
+                    Size = UDim2.new(1, -2, 0, 0),
+                }):Play()
+                task.delay(STYLE.TweenPanel.Time, function()
+                    if history and history.Parent and history:GetAttribute("VanillaUIAnimationToken") == token then
+                        history.Visible = false
+                    end
+                end)
+            end
+            if type(window._refreshActivityBadge) == "function" then
+                window:_refreshActivityBadge()
+            end
+        end
+        if immersive.RefreshActivitySetting then
+            task.defer(immersive.RefreshActivitySetting)
+        end
+    end, function()
+        return immersive.ActivityHistoryExpanded
+    end))
+
     if window.ConfigurationSaving.Enabled then
         createSettingRow("Save configuration", function() return "Local file" end, function()
             local ok, err = window:SaveConfiguration()
@@ -5125,6 +5182,7 @@ function VanillaUI:CreateWindow(options)
     local discordButton = create("TextButton", {
         Name = "DiscordButton",
         Size = UDim2.new(1, -2, 0, 40),
+        LayoutOrder = 100,
         Text = "Discord · Copy invite",
         Font = Enum.Font.GothamMedium,
         TextSize = 13,
@@ -5156,7 +5214,7 @@ function VanillaUI:CreateWindow(options)
 
     applyScale()
 
-    local helpPanel = createFloatingPanel(window, "HelpPanel", "Help", UDim2.fromOffset(480, 370))
+    local helpPanel = createFloatingPanel(window, "HelpPanel", "Help", UDim2.fromOffset(430, 330))
     window.HelpPanel = helpPanel
     attachScale(helpPanel)
     local helpLabel = create("TextLabel", {
@@ -5194,49 +5252,75 @@ function VanillaUI:CreateWindow(options)
         return table.concat(lines, "\n")
     end)
 
-    immersive.ActivityPanel = createFloatingPanel(window, "ActivityPanel", "Activity center", UDim2.fromOffset(440, 430))
-    window.ActivityPanel = immersive.ActivityPanel
-    attachScale(immersive.ActivityPanel)
+    immersive.ActivityHistory = create("CanvasGroup", {
+        Name = "ActivityHistory",
+        Size = UDim2.new(1, -2, 0, 0),
+        BackgroundColor3 = THEME.ButtonAlt,
+        BackgroundTransparency = 0.04,
+        BorderSizePixel = 0,
+        GroupTransparency = 1,
+        Visible = false,
+        LayoutOrder = 90,
+        ClipsDescendants = true,
+        ZIndex = 82,
+    }, settingsList)
+    addCorner(immersive.ActivityHistory, STYLE.Corner)
+    addStroke(immersive.ActivityHistory, THEME.Border, STYLE.Stroke)
+    window.ActivityPanel = nil
+
+    immersive.ActivityTitle = create("TextLabel", {
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -104, 0, 38),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = "Activity history",
+        TextColor3 = THEME.CategoryTitle,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 83,
+    }, immersive.ActivityHistory)
+    window:_bindLocalized(immersive.ActivityTitle, "Text", "Activity history", string.upper)
+
+    immersive.ActivityClear = create("TextButton", {
+        Name = "Clear",
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -8, 0, 19),
+        Size = UDim2.fromOffset(82, 26),
+        Text = "Clear history",
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        ZIndex = 84,
+    }, immersive.ActivityHistory)
+    styleButton(window, immersive.ActivityClear)
+    window:_bindLocalized(immersive.ActivityClear, "Text", "Clear history", string.upper)
+
     immersive.ActivityList = create("ScrollingFrame", {
         Name = "ActivityList",
-        Position = UDim2.fromOffset(12, 58),
-        Size = UDim2.new(1, -24, 1, -72),
+        Position = UDim2.fromOffset(8, 40),
+        Size = UDim2.new(1, -16, 1, -48),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         CanvasSize = UDim2.new(),
         ScrollBarThickness = 0,
         ScrollBarImageTransparency = 1,
-        ZIndex = 81,
-    }, immersive.ActivityPanel)
-    create("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, immersive.ActivityList)
+        ZIndex = 83,
+    }, immersive.ActivityHistory)
+    create("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, immersive.ActivityList)
     immersive.ActivityEmpty = create("TextLabel", {
         Name = "Empty",
-        Size = UDim2.new(1, 0, 0, 42),
+        Size = UDim2.new(1, 0, 0, 38),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = "No recent activity.",
         TextColor3 = THEME.SubText,
-        TextSize = 13,
+        TextSize = 12,
         TextWrapped = true,
         TextXAlignment = Enum.TextXAlignment.Left,
         LayoutOrder = 1,
-        ZIndex = 82,
+        ZIndex = 84,
     }, immersive.ActivityList)
     window:_bindLocalized(immersive.ActivityEmpty, "Text", "No recent activity.")
-    local activityHeader = immersive.ActivityPanel:FindFirstChild("TitleBar")
-    immersive.ActivityClear = create("TextButton", {
-        Name = "Clear",
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -46, 0.5, 0),
-        Size = UDim2.fromOffset(78, 26),
-        Text = "Clear history",
-        Font = Enum.Font.GothamMedium,
-        TextSize = 10,
-        ZIndex = 83,
-    }, activityHeader)
-    styleButton(window, immersive.ActivityClear)
-    window:_bindLocalized(immersive.ActivityClear, "Text", "Clear history", string.upper)
 
     function window:_refreshActivityEmpty()
         if immersive.ActivityEmpty then
@@ -5245,10 +5329,12 @@ function VanillaUI:CreateWindow(options)
     end
 
     function window:_refreshActivityBadge()
-        local count = self.UnreadActivities or 0
-        immersive.ActivityBadge.Visible = count > 0
-        immersive.ActivityBadge.Text = count > 99 and "99+" or tostring(count)
-        immersive.ActivityBadge.Size = UDim2.fromOffset(count > 99 and 24 or 15, 15)
+        if immersive.ActivityBadge then
+            immersive.ActivityBadge.Visible = false
+        end
+        if immersive.RefreshActivitySetting then
+            immersive.RefreshActivitySetting()
+        end
     end
 
     function window:_renderActivity(entry)
@@ -5266,12 +5352,12 @@ function VanillaUI:CreateWindow(options)
         end
         local row = create("Frame", {
             Name = "Activity",
-            Size = UDim2.new(1, -2, 0, entry.Content ~= "" and 68 or 48),
+            Size = UDim2.new(1, -2, 0, entry.Content ~= "" and 62 or 44),
             BackgroundColor3 = THEME.Button,
             BackgroundTransparency = STYLE.Acrylic,
             BorderSizePixel = 0,
             LayoutOrder = -entry.Order,
-            ZIndex = 82,
+            ZIndex = 84,
         }, immersive.ActivityList)
         addCorner(row, STYLE.Corner)
         addStroke(row, THEME.Border, STYLE.Stroke)
@@ -5281,45 +5367,45 @@ function VanillaUI:CreateWindow(options)
             Position = UDim2.fromOffset(5, 5),
             BackgroundColor3 = stateColor,
             BorderSizePixel = 0,
-            ZIndex = 83,
+            ZIndex = 85,
         }, row)
         local titleObject = create("TextLabel", {
-            Position = UDim2.fromOffset(15, 6),
-            Size = UDim2.new(1, -86, 0, 18),
+            Position = UDim2.fromOffset(15, 5),
+            Size = UDim2.new(1, -82, 0, 18),
             BackgroundTransparency = 1,
             Font = Enum.Font.GothamMedium,
             Text = self:_translate(entry.Title),
             TextColor3 = THEME.Text,
-            TextSize = 13,
+            TextSize = 12,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextTruncate = Enum.TextTruncate.AtEnd,
-            ZIndex = 83,
+            ZIndex = 85,
         }, row)
         local timeObject = create("TextLabel", {
             AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -10, 0, 6),
-            Size = UDim2.fromOffset(64, 18),
+            Position = UDim2.new(1, -8, 0, 5),
+            Size = UDim2.fromOffset(60, 18),
             BackgroundTransparency = 1,
             Font = Enum.Font.Gotham,
             Text = entry.Clock,
             TextColor3 = THEME.SubText,
-            TextSize = 10,
+            TextSize = 9,
             TextXAlignment = Enum.TextXAlignment.Right,
-            ZIndex = 83,
+            ZIndex = 85,
         }, row)
         if entry.Content ~= "" then
             local contentObject = create("TextLabel", {
-                Position = UDim2.fromOffset(15, 28),
-                Size = UDim2.new(1, -25, 0, 32),
+                Position = UDim2.fromOffset(15, 26),
+                Size = UDim2.new(1, -23, 0, 29),
                 BackgroundTransparency = 1,
                 Font = Enum.Font.Gotham,
                 Text = self:_translate(entry.Content),
                 TextColor3 = THEME.SubText,
-                TextSize = 11,
+                TextSize = 10,
                 TextWrapped = true,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Top,
-                ZIndex = 83,
+                ZIndex = 85,
             }, row)
             entry.ContentObject = contentObject
         end
@@ -5327,9 +5413,6 @@ function VanillaUI:CreateWindow(options)
         entry.TitleObject = titleObject
         entry.TimeObject = timeObject
         self:_refreshActivityEmpty()
-        if self._focusOwner == immersive.ActivityPanel then
-            self:_raiseFocusedObject(immersive.ActivityPanel)
-        end
     end
 
     registerConnection(window, immersive.ActivityClear.MouseButton1Click:Connect(function()
@@ -5337,7 +5420,7 @@ function VanillaUI:CreateWindow(options)
         window:_playSound("Confirm")
     end))
 
-    immersive.UserPanel = createFloatingPanel(window, "UserPanel", "User profile", UDim2.fromOffset(420, 430))
+    immersive.UserPanel = createFloatingPanel(window, "UserPanel", "User profile", UDim2.fromOffset(390, 400))
     window.UserPanel = immersive.UserPanel
     attachScale(immersive.UserPanel)
     immersive.ProfileAvatar = create("ImageLabel", {
@@ -5498,7 +5581,7 @@ function VanillaUI:CreateWindow(options)
         immersive.UserLogoutButton.Visible = type(data.OnLogout or data.LogoutCallback) == "function"
     end
 
-    immersive.MobileNavPanel = createFloatingPanel(window, "MobileNavPanel", "Sections", UDim2.fromOffset(360, 430))
+    immersive.MobileNavPanel = createFloatingPanel(window, "MobileNavPanel", "Sections", UDim2.fromOffset(330, 380))
     window.MobileNavPanel = immersive.MobileNavPanel
     attachScale(immersive.MobileNavPanel)
     immersive.MobileNavList = create("ScrollingFrame", {
@@ -5516,12 +5599,11 @@ function VanillaUI:CreateWindow(options)
     create("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, immersive.MobileNavList)
     immersive.MobileNavConnections = {}
 
-    local floatingPanels = {searchPanel, infoPanel, settingsPanel, helpPanel, immersive.ActivityPanel, immersive.UserPanel, immersive.MobileNavPanel}
+    local floatingPanels = {searchPanel, infoPanel, settingsPanel, helpPanel, immersive.UserPanel, immersive.MobileNavPanel}
     window._panelButtonRefreshers[searchPanel] = window._refreshSearchButton
     window._panelButtonRefreshers[infoPanel] = window._refreshInfoButton
     window._panelButtonRefreshers[settingsPanel] = window._refreshSettingsButton
     window._panelButtonRefreshers[helpPanel] = window._refreshHelpButton
-    window._panelButtonRefreshers[immersive.ActivityPanel] = window._refreshActivityButton
     window._panelButtonRefreshers[immersive.UserPanel] = window._refreshUserButton
     window._panelButtonRefreshers[immersive.MobileNavPanel] = window._refreshMobileNavButton
 
@@ -5542,55 +5624,6 @@ function VanillaUI:CreateWindow(options)
         panel:SetAttribute("VanillaUIAnimationToken", token)
         return token
     end
-    local panelVisualCache = setmetatable({}, {__mode = "k"})
-
-    local function capturePanelVisuals(panel)
-        local cached = panelVisualCache[panel]
-        if cached then
-            return cached
-        end
-        cached = {}
-        for _, item in ipairs(panel:GetDescendants()) do
-            local state = {}
-            if item:IsA("GuiObject") then
-                state.BackgroundTransparency = item.BackgroundTransparency
-            end
-            if item:IsA("TextLabel") or item:IsA("TextButton") or item:IsA("TextBox") then
-                state.TextTransparency = item.TextTransparency
-                state.TextStrokeTransparency = item.TextStrokeTransparency
-            elseif item:IsA("ImageLabel") or item:IsA("ImageButton") then
-                state.ImageTransparency = item.ImageTransparency
-            elseif item:IsA("UIStroke") then
-                state.Transparency = item.Transparency
-            end
-            if next(state) then
-                cached[item] = state
-            end
-        end
-        panelVisualCache[panel] = cached
-        return cached
-    end
-
-    local function setPanelVisuals(panel, hidden, animate)
-        local cached = capturePanelVisuals(panel)
-        for item, state in pairs(cached) do
-            if item and item.Parent then
-                local target = {}
-                for property, original in pairs(state) do
-                    target[property] = hidden and 1 or original
-                end
-                if animate then
-                    TweenService:Create(item, STYLE.TweenPanel, target):Play()
-                else
-                    for property, value in pairs(target) do
-                        item[property] = value
-                    end
-                end
-            end
-        end
-    end
-
-
     local function openFloatingPanel(panel)
         if not panel then
             return
@@ -5605,22 +5638,17 @@ function VanillaUI:CreateWindow(options)
         local target = floatingPanelTarget()
         panel:SetAttribute("VanillaUIAnimating", true)
         panel.Visible = true
+        panel.Active = true
+        panel.Position = UDim2.new(target.X.Scale, target.X.Offset, target.Y.Scale, target.Y.Offset + 8)
+        panel.GroupTransparency = 1
         window:_refreshPanelButton(panel)
-        panel.Position = UDim2.new(target.X.Scale, target.X.Offset, target.Y.Scale, target.Y.Offset + 10)
-        panel.BackgroundTransparency = 1
-        local stroke = panel:FindFirstChildOfClass("UIStroke")
-        if stroke then stroke.Transparency = 1 end
-        setPanelVisuals(panel, true, false)
         TweenService:Create(panel, STYLE.TweenPanel, {
             Position = target,
-            BackgroundTransparency = 0.04,
+            GroupTransparency = 0,
         }):Play()
-        if stroke then
-            TweenService:Create(stroke, STYLE.TweenPanel, {Transparency = STYLE.Stroke}):Play()
-        end
-        setPanelVisuals(panel, false, true)
         task.delay(STYLE.TweenPanel.Time, function()
             if panel and panel.Parent and panel:GetAttribute("VanillaUIAnimationToken") == token then
+                panel.GroupTransparency = 0
                 panel:SetAttribute("VanillaUIAnimating", false)
             end
         end)
@@ -5633,38 +5661,32 @@ function VanillaUI:CreateWindow(options)
             end
             return
         end
-        window:_refreshPanelButton(panel)
         window:_playSound("Close")
         window:_endFocus(panel, immediate == true)
         local token = nextPanelAnimationToken(panel)
         local target = floatingPanelTarget()
         panel:SetAttribute("VanillaUIAnimating", true)
+        panel.Active = false
         if immediate then
-            setPanelVisuals(panel, true, false)
+            panel.GroupTransparency = 1
             panel.Visible = false
             panel.Position = target
-            panel.BackgroundTransparency = 0.04
-            setPanelVisuals(panel, false, false)
+            panel.GroupTransparency = 0
+            panel.Active = true
             panel:SetAttribute("VanillaUIAnimating", false)
             window:_refreshPanelButton(panel)
             return
         end
-        local stroke = panel:FindFirstChildOfClass("UIStroke")
-        setPanelVisuals(panel, true, true)
         TweenService:Create(panel, STYLE.TweenPanel, {
             Position = UDim2.new(target.X.Scale, target.X.Offset, target.Y.Scale, target.Y.Offset + 8),
-            BackgroundTransparency = 1,
+            GroupTransparency = 1,
         }):Play()
-        if stroke then
-            TweenService:Create(stroke, STYLE.TweenPanel, {Transparency = 1}):Play()
-        end
         task.delay(STYLE.TweenPanel.Time, function()
             if panel and panel.Parent and panel:GetAttribute("VanillaUIAnimationToken") == token then
                 panel.Visible = false
                 panel.Position = target
-                panel.BackgroundTransparency = 0.04
-                if stroke then stroke.Transparency = STYLE.Stroke end
-                setPanelVisuals(panel, false, false)
+                panel.GroupTransparency = 0
+                panel.Active = true
                 panel:SetAttribute("VanillaUIAnimating", false)
                 window:_refreshPanelButton(panel)
             end
@@ -5793,13 +5815,6 @@ function VanillaUI:CreateWindow(options)
             return not self.MobileDescriptionsCollapsed
         end)
         order = order + 1
-        addMobileNavButton("Recent activity", order, function()
-            closeFloatingPanel(immersive.MobileNavPanel, true)
-            togglePanel(immersive.ActivityPanel)
-            self.UnreadActivities = 0
-            self:_refreshActivityBadge()
-        end)
-        order = order + 1
         addMobileNavButton("Information", order, function()
             closeFloatingPanel(immersive.MobileNavPanel, true)
             togglePanel(infoPanel)
@@ -5819,13 +5834,6 @@ function VanillaUI:CreateWindow(options)
         end
     end
 
-    registerConnection(window, immersive.ActivityButton.MouseButton1Click:Connect(function()
-        togglePanel(immersive.ActivityPanel)
-        if immersive.ActivityPanel.Visible then
-            window.UnreadActivities = 0
-            window:_refreshActivityBadge()
-        end
-    end))
     registerConnection(window, immersive.UserButton.MouseButton1Click:Connect(function()
         togglePanel(immersive.UserPanel)
     end))
@@ -6350,9 +6358,9 @@ function VanillaUI:CreateWindow(options)
         local responsive = 1
         if window.AutoScale then
             if mode == "Mobile" then
-                responsive = (viewport.X < rules.Mobile or viewport.Y < 440) and 0.88 or 0.94
+                responsive = (viewport.X < rules.Mobile or viewport.Y < 440) and 0.86 or 0.91
             elseif mode == "Compact" then
-                responsive = viewport.Y < 560 and 0.95 or 0.98
+                responsive = viewport.Y < 560 and 0.91 or 0.95
             end
         end
         window._setResponsiveScale(responsive)
@@ -6360,26 +6368,27 @@ function VanillaUI:CreateWindow(options)
         local effectiveScale = window.UIScale.EffectiveScale
         local safeWidth = math.max(300, (viewport.X - 24) / effectiveScale)
         local safeHeight = math.max(250, (viewport.Y - 96) / effectiveScale)
-        local widthLimit = mode == "Wide" and 1200 or (mode == "Compact" and 720 or 520)
+        local widthLimit = mode == "Wide" and 980 or (mode == "Compact" and 660 or 460)
+        local heightLimit = mode == "Wide" and 470 or (mode == "Compact" and 500 or 540)
         local width = math.clamp(safeWidth, mode == "Mobile" and 300 or 320, widthLimit)
-        local height = math.clamp(safeHeight, 250, 700)
+        local height = math.clamp(safeHeight, 250, heightLimit)
         mainContainer.Size = UDim2.fromOffset(width, height)
 
         local barLayout = mainBar:FindFirstChildOfClass("UIListLayout")
         if barLayout then
-            barLayout.Padding = UDim.new(0, mode == "Mobile" and 5 or (mode == "Compact" and 7 or 10))
+            barLayout.Padding = UDim.new(0, mode == "Mobile" and 4 or (mode == "Compact" and 6 or 7))
         end
-        menuButton.Size = UDim2.fromOffset(mode == "Mobile" and 72 or (mode == "Compact" and 84 or 100), 40)
-        helpButton.Size = UDim2.fromOffset(mode == "Wide" and 100 or 76, 40)
-        immersive.MobileNavButton.Size = UDim2.fromOffset(mode == "Mobile" and 104 or 118, 40)
-        immersive.UserButton.Size = UDim2.fromOffset(mode == "Mobile" and 40 or (mode == "Compact" and 128 or 160), 40)
+        menuButton.Size = UDim2.fromOffset(mode == "Mobile" and 66 or (mode == "Compact" and 78 or 88), 36)
+        helpButton.Size = UDim2.fromOffset(mode == "Wide" and 88 or 70, 36)
+        immersive.MobileNavButton.Size = UDim2.fromOffset(mode == "Mobile" and 92 or 104, 36)
+        immersive.UserButton.Size = UDim2.fromOffset(mode == "Mobile" and 36 or (mode == "Compact" and 118 or 148), 36)
         immersive.UserName.Visible = mode ~= "Mobile"
         immersive.UserStatus.Visible = mode ~= "Mobile"
         infoButton.Visible = mode == "Wide"
         helpButton.Visible = mode == "Wide"
-        immersive.ActivityButton.Visible = mode ~= "Mobile"
-        settingsButton.Size = UDim2.fromOffset(mode == "Mobile" and 36 or 40, 40)
-        searchButton.Size = UDim2.fromOffset(mode == "Mobile" and 36 or 40, 40)
+        immersive.ActivityButton.Visible = false
+        settingsButton.Size = UDim2.fromOffset(36, 36)
+        searchButton.Size = UDim2.fromOffset(36, 36)
 
         local holderLayout = tabHolder:FindFirstChildOfClass("UIListLayout")
         if holderLayout then
@@ -6474,11 +6483,11 @@ end
 
 
 --[==[
-# VanillaUI v0.7.1, documentación completa de API
+# VanillaUI v0.7.2, documentación completa de API
 
 ## 1. Propósito
 
-VanillaUI es una biblioteca privada de interfaz para scripts Luau de Roblox. Mantiene la identidad visual de V+ Sentinel y ofrece ventanas, categorías, secciones, controles, traducciones, configuraciones, sonido, modo de enfoque, diseño adaptable, perfil de usuario, introducción, notificaciones y centro de actividad.
+VanillaUI es una biblioteca privada de interfaz para scripts Luau de Roblox. Mantiene la identidad visual de V+ Sentinel y ofrece ventanas, categorías, secciones, controles, traducciones, configuraciones, sonido, modo de enfoque, diseño adaptable, perfil de usuario, introducción, notificaciones e historial de actividad dentro de Ajustes.
 
 Esta documentación funciona como contrato técnico para desarrolladores y para otras IA. Al crear módulos nuevos, conserva la API pública y separa la lógica funcional de la construcción visual.
 
@@ -6529,8 +6538,8 @@ local Window = VanillaUI:CreateWindow(options)
 | `Name`, `Title` | string | `VanillaUI` | Nombre principal. |
 | `Subtitle`, `LoadingSubtitle` | string | `Vanilla Lattice` | Subtítulo y texto auxiliar. |
 | `ToggleKey`, `ToggleUIKeybind` | Enum.KeyCode o string | `Delete` | Muestra u oculta la interfaz. |
-| `TabWidth`, `CategoryWidth` | number | `205` | Ancho de cada categoría, limitado entre 170 y 300. |
-| `Scale` | number | `1.06` | Escala manual, limitada entre 0.80 y 1.25. |
+| `TabWidth`, `CategoryWidth` | number | `180` | Ancho de cada categoría, limitado entre 155 y 250. |
+| `Scale` | number | `0.92` | Escala manual, limitada entre 0.76 y 1.18. |
 | `AutoScale`, `Responsive` | boolean | `true` | Ajusta escala y estructura según el viewport. |
 | `MenuVisible` | boolean | `true` | Estado inicial de las categorías. |
 | `DisplayOrder` | number | `1000` | Orden del `ScreenGui`. |
@@ -6544,7 +6553,7 @@ local Window = VanillaUI:CreateWindow(options)
 | `ResponsiveRules` | table | 1100/760/520 | Límites Wide, Compact y Mobile. |
 | `User` | table, true o false | nil | Perfil de usuario. |
 | `Intro` | table o true | nil | Introducción previa a la ventana. |
-| `ActivityLimit` | number | `100` | Máximo de registros del centro de actividad. |
+| `ActivityLimit` | number | `100` | Máximo de registros del historial integrado en Ajustes. |
 
 ### ConfigurationSaving
 
@@ -6992,7 +7001,7 @@ Notice:SetContent("New content")
 Notice:Close()
 ```
 
-VanillaUI suma dos segundos al `Duration` configurado. Las notificaciones aparecen abajo a la derecha y se registran en el centro de actividad salvo que `LogActivity = false`.
+VanillaUI suma dos segundos al `Duration` configurado. Las notificaciones aparecen abajo a la derecha y se registran en el historial integrado dentro de Ajustes, salvo que `LogActivity = false`.
 
 ## 20. Centro de actividad
 
@@ -7376,7 +7385,7 @@ Prueba siempre la versión ofuscada. Algunos ofuscadores pueden romper metatable
 
 ## 30. Versión documentada
 
-- Biblioteca: VanillaUI v0.7.1.
+- Biblioteca: VanillaUI v0.7.2.
 - Tema: V+ Sentinel.
 - Invitación integrada: `https://discord.gg/CJP24bGhGJ`.
 - URL RAW esperada: `https://raw.githubusercontent.com/vista8kolo/VanillaUI/refs/heads/main/a`.

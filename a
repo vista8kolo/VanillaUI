@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.7.6
+    VanillaUI v0.7.7
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.7.6",
+    Version = "0.7.7",
     Flags = {},
 }
 
@@ -28,6 +28,7 @@ local DISCORD_BLURPLE_HOVER = Color3.fromRGB(105, 116, 255)
 local PRIMARY_TAB_LIMIT = 5
 local FLOATING_PANEL_OFFSET = 60
 local TOP_SAFE_OFFSET = 48
+local USER_DOCK_GAP = 6
 local NOTIFICATION_EXTRA_DURATION = 2
 local SEARCH_DEBOUNCE = 0.06
 local DEFAULT_TEXT_SIZE = 16
@@ -158,6 +159,12 @@ local BUILTIN_TRANSLATIONS = {
         ["Interface sounds"] = "Sonidos de interfaz",
         ["Focus mode"] = "Modo de enfoque",
         ["Responsive layout"] = "Diseño adaptable",
+        ["Interface"] = "INTERFAZ",
+        ["Experience"] = "EXPERIENCIA",
+        ["System"] = "SISTEMA",
+        ["Scale, layout and position"] = "Escala, distribución y posición",
+        ["Sound, focus and feedback"] = "Sonido, enfoque y respuesta",
+        ["History, configuration and access"] = "Historial, configuración y acceso",
         ["Wide"] = "Amplio",
         ["Compact"] = "Compacto",
         ["Mobile"] = "Móvil",
@@ -227,6 +234,12 @@ local BUILTIN_TRANSLATIONS = {
         ["Interface sounds"] = "Sons da interface",
         ["Focus mode"] = "Modo de foco",
         ["Responsive layout"] = "Layout adaptável",
+        ["Interface"] = "INTERFACE",
+        ["Experience"] = "EXPERIÊNCIA",
+        ["System"] = "SISTEMA",
+        ["Scale, layout and position"] = "Escala, layout e posição",
+        ["Sound, focus and feedback"] = "Som, foco e resposta",
+        ["History, configuration and access"] = "Histórico, configuração e acesso",
         ["Wide"] = "Amplo",
         ["Compact"] = "Compacto",
         ["Mobile"] = "Móvel",
@@ -1712,12 +1725,12 @@ local function createSectionTitle(section, title)
         Name = "SectionTitle",
         Size = UDim2.new(1, 0, 0, 24),
         BackgroundColor3 = THEME.HeaderSurface,
-        BackgroundTransparency = 0.62,
+        BackgroundTransparency = 0.76,
         BorderSizePixel = 0,
         Font = Enum.Font.GothamMedium,
         Text = string.upper(title),
         TextColor3 = THEME.CategoryTitle,
-        TextSize = 14,
+        TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
         TextWrapped = true,
@@ -1726,35 +1739,35 @@ local function createSectionTitle(section, title)
     }, section.Parent)
     addCorner(label, 4)
     create("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 6),
-    }, label)
-    create("Frame", {
-        Name = "SectionMarker",
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, 2, 0.5, 0),
-        Size = UDim2.fromOffset(2, 12),
-        BackgroundColor3 = THEME.Accent,
-        BackgroundTransparency = 0.12,
-        BorderSizePixel = 0,
+        PaddingLeft = UDim.new(0, 9),
+        PaddingRight = UDim.new(0, 7),
     }, label)
 
-    local divider = create("Frame", {
-        Name = "SectionDivider",
-        Size = UDim2.new(1, -14, 0, 1),
+    local accentLine = create("Frame", {
+        Name = "SectionAccent",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 9, 1, -1),
+        Size = UDim2.fromOffset(42, 1),
         BackgroundColor3 = THEME.Accent,
-        BackgroundTransparency = 0.52,
+        BackgroundTransparency = 0.26,
         BorderSizePixel = 0,
-        LayoutOrder = section:_nextOrder(),
-    }, section.Parent)
+    }, label)
     create("UIGradient", {
         Color = ColorSequence.new(THEME.Accent),
         Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.18),
-            NumberSequenceKeypoint.new(0.55, 0.62),
+            NumberSequenceKeypoint.new(0, 0.04),
             NumberSequenceKeypoint.new(1, 1),
         }),
-    }, divider)
+    }, accentLine)
+
+    local divider = create("Frame", {
+        Name = "SectionDivider",
+        Size = UDim2.new(1, -18, 0, 1),
+        BackgroundColor3 = THEME.Accent,
+        BackgroundTransparency = 0.84,
+        BorderSizePixel = 0,
+        LayoutOrder = section:_nextOrder(),
+    }, section.Parent)
 
     section.TitleLabel = label
     section.Divider = divider
@@ -5065,14 +5078,23 @@ function VanillaUI:CreateWindow(options)
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, mainBar)
 
+    immersive.UserDock = create("Frame", {
+        Name = "UserDock",
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET - USER_DOCK_GAP),
+        Size = UDim2.fromOffset(148, 36),
+        BackgroundTransparency = 1,
+        Active = true,
+        Visible = false,
+    }, screenGui)
+
     immersive.UserButton = create("TextButton", {
         Name = "UserButton",
-        Size = UDim2.fromOffset(148, 36),
-        LayoutOrder = 0,
+        Size = UDim2.fromScale(1, 1),
         Text = "",
         AutoButtonColor = false,
-        Visible = false,
-    }, mainBar)
+        Visible = true,
+    }, immersive.UserDock)
     styleSurface(immersive.UserButton, THEME.Button)
     immersive.UserAvatar = create("ImageLabel", {
         Name = "Avatar",
@@ -5223,16 +5245,6 @@ function VanillaUI:CreateWindow(options)
     settingsButton.Font = Enum.Font.GothamMedium
     settingsButton.TextSize = 17
 
-    local helpButton = create("TextButton", {
-        Name = "HelpButton",
-        Size = UDim2.fromOffset(88, 36),
-        LayoutOrder = 8,
-        Text = options.HelpText or "Help",
-    }, mainBar)
-    window._refreshHelpButton = styleButton(window, helpButton, function()
-        return window.HelpPanel and window.HelpPanel.Visible
-    end)
-    window:_bindLocalized(helpButton, "Text", options.HelpText or "Help", string.upper)
 
     local mainContainer = create("Frame", {
         Name = "MainContainer",
@@ -5405,7 +5417,7 @@ function VanillaUI:CreateWindow(options)
     end
     window.TagContainer = tagContainer or create("Frame", {Visible = false, BackgroundTransparency = 1}, infoPanel)
 
-    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "VanillaUI settings", UDim2.fromOffset(400, 390))
+    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "VanillaUI settings", UDim2.fromOffset(410, 430))
     window.SettingsPanel = settingsPanel
 
     local scaleObjects = {}
@@ -5432,7 +5444,7 @@ function VanillaUI:CreateWindow(options)
         return scaleObject
     end
 
-    for _, target in ipairs({mainBar, mainContainer, notificationHolder, searchPanel, infoPanel, settingsPanel}) do
+    for _, target in ipairs({mainBar, immersive.UserDock, mainContainer, notificationHolder, searchPanel, infoPanel, settingsPanel}) do
         attachScale(target)
     end
 
@@ -5472,51 +5484,177 @@ function VanillaUI:CreateWindow(options)
         ScrollBarImageTransparency = 1,
         ZIndex = 81,
     }, settingsPanel)
-    create("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, settingsList)
+    create("UIListLayout", {Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder}, settingsList)
+
+    local settingsOrder = 0
+    local function nextSettingsOrder()
+        settingsOrder = settingsOrder + 10
+        return settingsOrder
+    end
+
+    local function createSettingsGroup(title, subtitle)
+        local group = create("Frame", {
+            Name = "SettingsGroup",
+            Size = UDim2.new(1, -2, 0, subtitle and 40 or 28),
+            BackgroundTransparency = 1,
+            LayoutOrder = nextSettingsOrder(),
+            ZIndex = 82,
+        }, settingsList)
+        local titleLabel = create("TextLabel", {
+            Position = UDim2.fromOffset(4, 2),
+            Size = UDim2.new(1, -8, 0, 17),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            Text = title,
+            TextColor3 = THEME.CategoryTitle,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 83,
+        }, group)
+        window:_bindLocalized(titleLabel, "Text", title, string.upper)
+        if subtitle then
+            local subtitleLabel = create("TextLabel", {
+                Position = UDim2.fromOffset(4, 19),
+                Size = UDim2.new(1, -8, 0, 15),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                Text = subtitle,
+                TextColor3 = THEME.SubText,
+                TextSize = 10,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                ZIndex = 83,
+            }, group)
+            window:_bindLocalized(subtitleLabel, "Text", subtitle)
+        end
+        create("Frame", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -4, 0, 10),
+            Size = UDim2.new(0.34, 0, 0, 1),
+            BackgroundColor3 = THEME.Accent,
+            BackgroundTransparency = 0.72,
+            BorderSizePixel = 0,
+            ZIndex = 83,
+        }, group)
+        return group
+    end
 
     local function createSettingRow(title, getValue, callback, activeProvider)
+        local isToggle = type(activeProvider) == "function"
         local button = create("TextButton", {
             Name = "SettingRow",
-            Size = UDim2.new(1, -2, 0, 44),
+            Size = UDim2.new(1, -2, 0, 48),
+            LayoutOrder = nextSettingsOrder(),
             Text = "",
             AutoButtonColor = false,
             ZIndex = 82,
         }, settingsList)
+        styleSurface(button, THEME.ButtonAlt)
+        button.BackgroundTransparency = 0.08
+
         local titleLabel = create("TextLabel", {
-            Position = UDim2.fromOffset(11, 0),
-            Size = UDim2.new(0.62, -11, 1, 0),
+            Position = UDim2.fromOffset(12, 0),
+            Size = UDim2.new(isToggle and 0.57 or 0.62, -12, 1, 0),
             BackgroundTransparency = 1,
-            Font = Enum.Font.Gotham,
+            Font = Enum.Font.GothamMedium,
             Text = title,
             TextColor3 = THEME.Text,
-            TextSize = 15,
+            TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextWrapped = true,
             TextTruncate = Enum.TextTruncate.None,
             ZIndex = 83,
         }, button)
         window:_bindLocalized(titleLabel, "Text", title)
+
+        local valueRightOffset = isToggle and 54 or 12
         local valueLabel = create("TextLabel", {
             AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -11, 0, 0),
-            Size = UDim2.new(0.38, -11, 1, 0),
+            Position = UDim2.new(1, -valueRightOffset, 0, 0),
+            Size = UDim2.new(isToggle and 0.27 or 0.38, -8, 1, 0),
             BackgroundTransparency = 1,
             Font = Enum.Font.GothamMedium,
             Text = "",
             TextColor3 = THEME.SubText,
-            TextSize = 13,
+            TextSize = 12,
             TextXAlignment = Enum.TextXAlignment.Right,
             TextWrapped = true,
             TextTruncate = Enum.TextTruncate.None,
             ZIndex = 83,
         }, button)
-        local refreshStyle = styleInteractiveSurface(window, button, button, activeProvider, {titleLabel, valueLabel})
+
+        local toggleTrack
+        local toggleKnob
+        if isToggle then
+            toggleTrack = create("Frame", {
+                Name = "StateTrack",
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(1, -11, 0.5, 0),
+                Size = UDim2.fromOffset(34, 18),
+                BackgroundColor3 = THEME.Button,
+                BackgroundTransparency = 0.04,
+                BorderSizePixel = 0,
+                ZIndex = 84,
+            }, button)
+            addCorner(toggleTrack, 9)
+            addStroke(toggleTrack, THEME.Border, 0.28)
+            toggleKnob = create("Frame", {
+                Name = "Knob",
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(0, 9, 0.5, 0),
+                Size = UDim2.fromOffset(12, 12),
+                BackgroundColor3 = THEME.SubText,
+                BorderSizePixel = 0,
+                ZIndex = 85,
+            }, toggleTrack)
+            addCorner(toggleKnob, 6)
+        end
+
+        local stroke = button:FindFirstChildOfClass("UIStroke")
+        local hovered = false
+        local function refreshStyle()
+            local active = isToggle and activeProvider() == true
+            local background = hovered and THEME.Hover or THEME.ButtonAlt
+            tween(button, {
+                BackgroundColor3 = background,
+                BackgroundTransparency = hovered and 0.035 or 0.08,
+            })
+            tween(titleLabel, {TextColor3 = hovered and THEME.CategoryTitle or THEME.Text})
+            tween(valueLabel, {TextColor3 = active and THEME.Accent or THEME.SubText})
+            if stroke then
+                tween(stroke, {Transparency = hovered and STYLE.StrokeHover or 0.24})
+            end
+            if toggleTrack and toggleKnob then
+                tween(toggleTrack, {
+                    BackgroundColor3 = active and THEME.Accent or THEME.Button,
+                    BackgroundTransparency = active and 0.02 or 0.06,
+                })
+                tween(toggleKnob, {
+                    Position = active and UDim2.new(1, -9, 0.5, 0) or UDim2.new(0, 9, 0.5, 0),
+                    BackgroundColor3 = active and THEME.ActiveText or THEME.SubText,
+                })
+            end
+        end
+
         local function refresh()
             local ok, value = safeCall(getValue)
             valueLabel.Text = ok and window:_translate(tostring(value or "")) or ""
             refreshStyle()
         end
         settingRefreshers[#settingRefreshers + 1] = refresh
+
+        registerConnection(window, button.MouseEnter:Connect(function()
+            hovered = true
+            window:_playSound("Hover")
+            refreshStyle()
+        end))
+        registerConnection(window, button.MouseLeave:Connect(function()
+            hovered = false
+            refreshStyle()
+        end))
+        registerConnection(window, button.MouseButton1Down:Connect(function()
+            window:_playSound("Click")
+        end))
         registerConnection(window, button.MouseButton1Click:Connect(function()
             safeCall(callback)
             refresh()
@@ -5525,6 +5663,7 @@ function VanillaUI:CreateWindow(options)
         return button, valueLabel, refresh
     end
 
+    createSettingsGroup("Interface", "Scale, layout and position")
     local scaleSteps = {0.8, 0.9, 1.0, 1.1}
     createSettingRow("Interface scale", function()
         return tostring(math.floor(uiScale.Scale * 100 + 0.5)) .. "%"
@@ -5547,6 +5686,22 @@ function VanillaUI:CreateWindow(options)
         return window.AutoScale
     end)
 
+    createSettingRow("Responsive layout", function()
+        return window.ResponsiveMode
+    end, function()
+        if type(window._updateResponsiveSize) == "function" then window._updateResponsiveSize() end
+    end)
+
+    createSettingRow("Reset position", function()
+        return "Top center"
+    end, function()
+        mainBar.Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET)
+        if type(window._syncFloatingPositions) == "function" then window._syncFloatingPositions() end
+    end)
+
+
+    createSettingsGroup("Experience", "Sound, focus and feedback")
+
     createSettingRow("Interface sounds", function()
         return window.SoundProfile.Enabled and "Enabled" or "Disabled"
     end, function()
@@ -5565,27 +5720,17 @@ function VanillaUI:CreateWindow(options)
         return window.FocusMode.Enabled
     end)
 
-    createSettingRow("Responsive layout", function()
-        return window.ResponsiveMode
-    end, function()
-        if type(window._updateResponsiveSize) == "function" then window._updateResponsiveSize() end
-    end)
-
-    createSettingRow("Reset position", function()
-        return "Top center"
-    end, function()
-        mainBar.Position = UDim2.new(0.5, 0, 0, TOP_SAFE_OFFSET)
-        if type(window._syncFloatingPositions) == "function" then window._syncFloatingPositions() end
-    end)
-
     createSettingRow("Test notification", function()
         return "2 s extra"
     end, function()
         window:Notify({Title = "VanillaUI", Content = "Test notification with enlarged text.", Duration = 3})
     end)
 
+    createSettingsGroup("System", "History, configuration and access")
+
     immersive.ActivityHistoryExpanded = false
-    immersive.RefreshActivitySetting = select(3, createSettingRow("Activity history", function()
+    local activitySettingRow
+    activitySettingRow, _, immersive.RefreshActivitySetting = createSettingRow("Activity history", function()
         local count = #(window.Activities or {})
         local label = immersive.ActivityHistoryExpanded and "Hide history" or "Show history"
         return window:_translate(label) .. " · " .. tostring(count)
@@ -5624,7 +5769,7 @@ function VanillaUI:CreateWindow(options)
         end
     end, function()
         return immersive.ActivityHistoryExpanded
-    end))
+    end)
 
     if window.ConfigurationSaving.Enabled then
         createSettingRow("Save configuration", function() return "Local file" end, function()
@@ -5640,7 +5785,7 @@ function VanillaUI:CreateWindow(options)
     local discordButton = create("TextButton", {
         Name = "DiscordButton",
         Size = UDim2.new(1, -2, 0, 40),
-        LayoutOrder = 100,
+        LayoutOrder = nextSettingsOrder(),
         Text = "Discord · Copy invite",
         Font = Enum.Font.GothamMedium,
         TextSize = 13,
@@ -5672,44 +5817,6 @@ function VanillaUI:CreateWindow(options)
 
     applyScale()
 
-    local helpPanel = createFloatingPanel(window, "HelpPanel", "Help", UDim2.fromOffset(430, 330))
-    window.HelpPanel = helpPanel
-    attachScale(helpPanel)
-    local helpLabel = create("TextLabel", {
-        Name = "Help",
-        Position = UDim2.fromOffset(14, 58),
-        Size = UDim2.new(1, -28, 1, -72),
-        BackgroundTransparency = 1,
-        Font = Enum.Font.Gotham,
-        Text = "",
-        TextColor3 = THEME.SubText,
-        TextSize = 14,
-        TextWrapped = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        LineHeight = 1.16,
-        ZIndex = 81,
-    }, helpPanel)
-    local helpSources = {
-        "Press DELETE to show or hide VanillaUI.",
-        "MENU shows or hides the categories.",
-        "The magnifier searches controls and jumps to them.",
-        "[L+] appears with more than 5 categories and changes groups.",
-        "The top bar can be dragged.",
-        "",
-        "API: CreateWindow, CreateTab, CreateSection and CreateGroup.",
-        "Elements: Button, Toggle, Slider, Dropdown, Input,",
-        "Keybind, ColorPicker, Stat, Paragraph, Label and Divider.",
-        "All controls support handles, flags and reordering.",
-    }
-    window:_bindLocalized(helpLabel, "Text", function()
-        local lines = {}
-        for _, source in ipairs(helpSources) do
-            lines[#lines + 1] = source == "" and "" or window:_translate(source)
-        end
-        return table.concat(lines, "\n")
-    end)
-
     immersive.ActivityHistory = create("CanvasGroup", {
         Name = "ActivityHistory",
         Size = UDim2.new(1, -2, 0, 0),
@@ -5717,7 +5824,7 @@ function VanillaUI:CreateWindow(options)
         BorderSizePixel = 0,
         GroupTransparency = 1,
         Visible = false,
-        LayoutOrder = 90,
+        LayoutOrder = (activitySettingRow and activitySettingRow.LayoutOrder + 1 or nextSettingsOrder()),
         ClipsDescendants = true,
         ZIndex = 82,
     }, settingsList)
@@ -6019,6 +6126,7 @@ function VanillaUI:CreateWindow(options)
     function window:_refreshUser()
         local data = self.User
         local visible = type(data) == "table"
+        immersive.UserDock.Visible = visible
         immersive.UserButton.Visible = visible
         if not visible then
             return
@@ -6066,11 +6174,10 @@ function VanillaUI:CreateWindow(options)
     create("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, immersive.MobileNavList)
     immersive.MobileNavConnections = {}
 
-    local floatingPanels = {searchPanel, infoPanel, settingsPanel, helpPanel, immersive.UserPanel, immersive.MobileNavPanel}
+    local floatingPanels = {searchPanel, infoPanel, settingsPanel, immersive.UserPanel, immersive.MobileNavPanel}
     window._panelButtonRefreshers[searchPanel] = window._refreshSearchButton
     window._panelButtonRefreshers[infoPanel] = window._refreshInfoButton
     window._panelButtonRefreshers[settingsPanel] = window._refreshSettingsButton
-    window._panelButtonRefreshers[helpPanel] = window._refreshHelpButton
     window._panelButtonRefreshers[immersive.UserPanel] = window._refreshUserButton
     window._panelButtonRefreshers[immersive.MobileNavPanel] = window._refreshMobileNavButton
 
@@ -6345,11 +6452,6 @@ function VanillaUI:CreateWindow(options)
         addMobileNavButton("Open settings", order, function()
             closeFloatingPanel(immersive.MobileNavPanel, true)
             togglePanel(settingsPanel)
-        end)
-        order = order + 1
-        addMobileNavButton("Help", order, function()
-            closeFloatingPanel(immersive.MobileNavPanel, true)
-            togglePanel(helpPanel)
         end)
         if self._focusOwner == immersive.MobileNavPanel then
             self:_raiseFocusedObject(immersive.MobileNavPanel)
@@ -6697,9 +6799,6 @@ function VanillaUI:CreateWindow(options)
     registerConnection(window, settingsButton.MouseButton1Click:Connect(function()
         togglePanel(settingsPanel)
     end))
-    registerConnection(window, helpButton.MouseButton1Click:Connect(function()
-        togglePanel(helpPanel)
-    end))
     local searchToken = 0
     registerConnection(window, searchBox:GetPropertyChangedSignal("Text"):Connect(function()
         searchToken = searchToken + 1
@@ -6721,6 +6820,12 @@ function VanillaUI:CreateWindow(options)
     local startPosition
 
     local function syncFloatingPositions()
+        immersive.UserDock.Position = UDim2.new(
+            mainBar.Position.X.Scale,
+            mainBar.Position.X.Offset,
+            mainBar.Position.Y.Scale,
+            mainBar.Position.Y.Offset - USER_DOCK_GAP
+        )
         mainContainer.Position = UDim2.new(
             mainBar.Position.X.Scale,
             mainBar.Position.X.Offset,
@@ -6753,13 +6858,15 @@ function VanillaUI:CreateWindow(options)
         return UDim2.new(0.5, x, 0, y)
     end
 
-    registerConnection(window, mainBar.InputBegan:Connect(function(input)
+    local function beginDockDrag(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPosition = mainBar.Position
         end
-    end))
+    end
+    registerConnection(window, mainBar.InputBegan:Connect(beginDockDrag))
+    registerConnection(window, immersive.UserDock.InputBegan:Connect(beginDockDrag))
 
     registerConnection(window, UserInputService.InputChanged:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
@@ -6901,13 +7008,12 @@ function VanillaUI:CreateWindow(options)
             barLayout.Padding = UDim.new(0, mode == "Mobile" and 4 or (mode == "Compact" and 6 or 7))
         end
         menuButton.Size = UDim2.fromOffset(mode == "Mobile" and 66 or (mode == "Compact" and 78 or 88), 36)
-        helpButton.Size = UDim2.fromOffset(mode == "Wide" and 88 or 70, 36)
         immersive.MobileNavButton.Size = UDim2.fromOffset(mode == "Mobile" and 92 or 104, 36)
-        immersive.UserButton.Size = UDim2.fromOffset(mode == "Mobile" and 36 or (mode == "Compact" and 118 or 148), 36)
+        immersive.UserDock.Size = UDim2.fromOffset(mode == "Mobile" and 42 or (mode == "Compact" and 128 or 148), 36)
+        immersive.UserButton.Size = UDim2.fromScale(1, 1)
         immersive.UserName.Visible = mode ~= "Mobile"
         immersive.UserStatus.Visible = mode ~= "Mobile"
         infoButton.Visible = mode == "Wide"
-        helpButton.Visible = mode == "Wide"
         immersive.ActivityButton.Visible = false
         settingsButton.Size = UDim2.fromOffset(36, 36)
         searchButton.Size = UDim2.fromOffset(36, 36)
@@ -7005,7 +7111,7 @@ end
 
 
 --[==[
-# VanillaUI v0.7.6, documentación completa de API
+# VanillaUI v0.7.7, documentación completa de API
 
 ## 1. Propósito
 
@@ -7910,7 +8016,7 @@ Prueba siempre la versión ofuscada. Algunos ofuscadores pueden romper metatable
 
 ## 30. Versión documentada
 
-- Biblioteca: VanillaUI v0.7.6.
+- Biblioteca: VanillaUI v0.7.7.
 - Cierre visual sincronizado, contraste activo reforzado y tipografía de perfil ampliada.
 - Tema: V+ Sentinel.
 - Invitación integrada: `https://discord.gg/CJP24bGhGJ`.

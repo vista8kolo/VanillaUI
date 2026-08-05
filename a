@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.7.5
+    VanillaUI v0.7.6
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.7.5",
+    Version = "0.7.6",
     Flags = {},
 }
 
@@ -80,6 +80,7 @@ local THEME = {
     DisabledText = Color3.fromRGB(226, 194, 198),
     ActiveText = Color3.fromRGB(22, 20, 17),
     ActiveSubText = Color3.fromRGB(72, 64, 52),
+    HeaderSurface = Color3.fromRGB(86, 74, 56),
 }
 
 local BUILTIN_TRANSLATIONS = {
@@ -383,18 +384,6 @@ local function addStroke(object, color, transparency)
     stroke.Color = color or THEME.Border
     stroke.Thickness = 1
     stroke.Transparency = transparency == nil and STYLE.Stroke or transparency
-    stroke.Parent = object
-    return stroke
-end
-
-local function addTextOutline(object, color, thickness, transparency)
-    local stroke = Instance.new("UIStroke")
-    stroke.Name = "VanillaUITextOutline"
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-    stroke.Color = color or Color3.fromRGB(5, 5, 5)
-    stroke.Thickness = thickness or 1.25
-    stroke.Transparency = transparency == nil and 0.14 or transparency
-    stroke.LineJoinMode = Enum.LineJoinMode.Round
     stroke.Parent = object
     return stroke
 end
@@ -1722,12 +1711,12 @@ local function createSectionTitle(section, title)
     local label = create("TextLabel", {
         Name = "SectionTitle",
         Size = UDim2.new(1, 0, 0, 24),
-        BackgroundTransparency = 1,
+        BackgroundColor3 = THEME.HeaderSurface,
+        BackgroundTransparency = 0.62,
         BorderSizePixel = 0,
-        Font = Enum.Font.GothamBold,
+        Font = Enum.Font.GothamMedium,
         Text = string.upper(title),
         TextColor3 = THEME.CategoryTitle,
-        TextStrokeTransparency = 1,
         TextSize = 14,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Center,
@@ -1735,7 +1724,7 @@ local function createSectionTitle(section, title)
         TextTruncate = Enum.TextTruncate.AtEnd,
         LayoutOrder = section:_nextOrder(),
     }, section.Parent)
-    addTextOutline(label, Color3.fromRGB(4, 4, 4), 1.35, 0.10)
+    addCorner(label, 4)
     create("UIPadding", {
         PaddingLeft = UDim.new(0, 10),
         PaddingRight = UDim.new(0, 6),
@@ -1743,26 +1732,26 @@ local function createSectionTitle(section, title)
     create("Frame", {
         Name = "SectionMarker",
         AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, 1, 0.5, 0),
-        Size = UDim2.fromOffset(3, 13),
+        Position = UDim2.new(0, 2, 0.5, 0),
+        Size = UDim2.fromOffset(2, 12),
         BackgroundColor3 = THEME.Accent,
-        BackgroundTransparency = 0.06,
+        BackgroundTransparency = 0.12,
         BorderSizePixel = 0,
     }, label)
 
     local divider = create("Frame", {
         Name = "SectionDivider",
-        Size = UDim2.new(1, -8, 0, 1),
+        Size = UDim2.new(1, -14, 0, 1),
         BackgroundColor3 = THEME.Accent,
-        BackgroundTransparency = 0.18,
+        BackgroundTransparency = 0.52,
         BorderSizePixel = 0,
         LayoutOrder = section:_nextOrder(),
     }, section.Parent)
     create("UIGradient", {
         Color = ColorSequence.new(THEME.Accent),
         Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.04),
-            NumberSequenceKeypoint.new(0.7, 0.48),
+            NumberSequenceKeypoint.new(0, 0.18),
+            NumberSequenceKeypoint.new(0.55, 0.62),
             NumberSequenceKeypoint.new(1, 1),
         }),
     }, divider)
@@ -4323,25 +4312,25 @@ function WindowMethods:CreateTab(options, icon)
     local titleButton = create("TextButton", {
         Name = "Title",
         Size = UDim2.new(1, -4, 0, 28),
-        BackgroundTransparency = 1,
+        BackgroundColor3 = THEME.HeaderSurface,
+        BackgroundTransparency = 0.55,
         BorderSizePixel = 0,
         Font = Enum.Font.GothamBold,
         Text = string.upper(title),
         TextColor3 = options.Color or THEME.CategoryTitle,
-        TextStrokeTransparency = 1,
         TextSize = 14,
         TextWrapped = true,
         TextTruncate = Enum.TextTruncate.AtEnd,
         AutoButtonColor = false,
         LayoutOrder = -1000,
     }, column)
-    addTextOutline(titleButton, Color3.fromRGB(4, 4, 4), 1.45, 0.08)
+    addCorner(titleButton, 4)
 
     local divider = create("Frame", {
         Name = "CategoryDivider",
         Size = UDim2.new(1, -4, 0, 1),
         BackgroundColor3 = options.Color or THEME.Accent,
-        BackgroundTransparency = 0.16,
+        BackgroundTransparency = 0.42,
         BorderSizePixel = 0,
         LayoutOrder = -999,
     }, column)
@@ -7016,7 +7005,7 @@ end
 
 
 --[==[
-# VanillaUI v0.7.5, documentación completa de API
+# VanillaUI v0.7.6, documentación completa de API
 
 ## 1. Propósito
 
@@ -7921,7 +7910,7 @@ Prueba siempre la versión ofuscada. Algunos ofuscadores pueden romper metatable
 
 ## 30. Versión documentada
 
-- Biblioteca: VanillaUI v0.7.5.
+- Biblioteca: VanillaUI v0.7.6.
 - Cierre visual sincronizado, contraste activo reforzado y tipografía de perfil ampliada.
 - Tema: V+ Sentinel.
 - Invitación integrada: `https://discord.gg/CJP24bGhGJ`.

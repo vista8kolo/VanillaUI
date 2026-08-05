@@ -1,11 +1,11 @@
 --[[
-    VanillaUI v0.5
+    VanillaUI v0.6
     Interfaz reutilizable basada en la identidad visual de V+ Sentinel.
     API inspirada en Rayfield, WindUI y Fluent.
 ]]
 
 local VanillaUI = {
-    Version = "0.5.0",
+    Version = "0.6.0",
     Flags = {},
 }
 
@@ -44,6 +44,116 @@ local THEME = {
     Disabled = Color3.fromRGB(72, 24, 32),
     DisabledText = Color3.fromRGB(226, 194, 198),
 }
+
+local BUILTIN_TRANSLATIONS = {
+    es = {
+        ["Menu"] = "MENÚ",
+        ["Help"] = "AYUDA",
+        ["Search controls"] = "BUSCAR CONTROLES",
+        ["Search FOV, ESP, settings..."] = "Buscar FOV, ESP, ajustes...",
+        ["Type the name of a feature or setting."] = "Escribe el nombre de una función o ajuste.",
+        ["No controls found."] = "No se encontraron controles.",
+        ["VanillaUI settings"] = "AJUSTES DE VANILLAUI",
+        ["Interface scale"] = "Escala de interfaz",
+        ["Automatic adaptation"] = "Adaptación automática",
+        ["Enabled"] = "Activa",
+        ["Disabled"] = "Desactivada",
+        ["Reset position"] = "Restablecer posición",
+        ["Top center"] = "Centro superior",
+        ["Test notification"] = "Probar notificación",
+        ["2 s extra"] = "2 s extra",
+        ["Save configuration"] = "Guardar configuración",
+        ["Load configuration"] = "Cargar configuración",
+        ["Local file"] = "Archivo local",
+        ["Configuration"] = "Configuración",
+        ["Configuration saved."] = "Configuración guardada.",
+        ["Configuration loaded."] = "Configuración cargada.",
+        ["Discord · Copy invite"] = "Discord · Copiar invitación",
+        ["Invite copied to clipboard."] = "Invitación copiada al portapapeles.",
+        ["Test notification with enlarged text."] = "Notificación de prueba con texto ampliado.",
+        ["None"] = "Ninguno",
+        ["Filter options..."] = "Filtrar opciones...",
+        ["Type here..."] = "Escribe aquí...",
+        ["Control locked"] = "Control bloqueado",
+        ["Transparency"] = "Transparencia",
+        ["SECTION"] = "SECCIÓN",
+        ["Private Vanilla Lattice environment."] = "Entorno privado de Vanilla Lattice.",
+        ["Press DELETE to show or hide VanillaUI."] = "SUPR: mostrar u ocultar VanillaUI.",
+        ["MENU shows or hides the categories."] = "MENÚ: mostrar u ocultar las categorías.",
+        ["The magnifier searches controls and jumps to them."] = "La lupa busca controles y permite saltar hasta ellos.",
+        ["[L+] appears with more than 5 categories and changes groups."] = "[L+]: aparece con más de 5 categorías y cambia de grupo.",
+        ["The top bar can be dragged."] = "La barra superior puede arrastrarse.",
+        ["API: CreateWindow, CreateTab, CreateSection and CreateGroup."] = "API: CreateWindow, CreateTab, CreateSection y CreateGroup.",
+        ["Elements: Button, Toggle, Slider, Dropdown, Input,"] = "Elementos: Button, Toggle, Slider, Dropdown, Input,",
+        ["Keybind, ColorPicker, Stat, Paragraph, Label and Divider."] = "Keybind, ColorPicker, Stat, Paragraph, Label y Divider.",
+        ["All controls support handles, flags and reordering."] = "Todos los controles admiten handles, flags y reordenamiento.",
+    },
+    pt = {
+        ["Menu"] = "MENU",
+        ["Help"] = "AJUDA",
+        ["Search controls"] = "BUSCAR CONTROLES",
+        ["Search FOV, ESP, settings..."] = "Buscar FOV, ESP, configurações...",
+        ["Type the name of a feature or setting."] = "Digite o nome de uma função ou configuração.",
+        ["No controls found."] = "Nenhum controle encontrado.",
+        ["VanillaUI settings"] = "CONFIGURAÇÕES DA VANILLAUI",
+        ["Interface scale"] = "Escala da interface",
+        ["Automatic adaptation"] = "Adaptação automática",
+        ["Enabled"] = "Ativa",
+        ["Disabled"] = "Desativada",
+        ["Reset position"] = "Restaurar posição",
+        ["Top center"] = "Centro superior",
+        ["Test notification"] = "Testar notificação",
+        ["2 s extra"] = "2 s extra",
+        ["Save configuration"] = "Salvar configuração",
+        ["Load configuration"] = "Carregar configuração",
+        ["Local file"] = "Arquivo local",
+        ["Configuration"] = "Configuração",
+        ["Configuration saved."] = "Configuração salva.",
+        ["Configuration loaded."] = "Configuração carregada.",
+        ["Discord · Copy invite"] = "Discord · Copiar convite",
+        ["Invite copied to clipboard."] = "Convite copiado para a área de transferência.",
+        ["Test notification with enlarged text."] = "Notificação de teste com texto ampliado.",
+        ["None"] = "Nenhum",
+        ["Filter options..."] = "Filtrar opções...",
+        ["Type here..."] = "Digite aqui...",
+        ["Control locked"] = "Controle bloqueado",
+        ["Transparency"] = "Transparência",
+        ["SECTION"] = "SEÇÃO",
+        ["Private Vanilla Lattice environment."] = "Ambiente privado da Vanilla Lattice.",
+    },
+}
+
+local function normalizeLocaleId(value)
+    local locale = string.lower(tostring(value or "en")):gsub("_", "-")
+    locale = locale:gsub("%s+", "")
+    if locale == "" then
+        locale = "en"
+    end
+    return locale
+end
+
+local function copyTranslationPacks(customPacks)
+    local output = {}
+    local function merge(packs)
+        if type(packs) ~= "table" then
+            return
+        end
+        for localeId, entries in pairs(packs) do
+            if type(entries) == "table" then
+                local normalized = normalizeLocaleId(localeId)
+                output[normalized] = output[normalized] or {}
+                for source, translated in pairs(entries) do
+                    if type(source) == "string" and translated ~= nil then
+                        output[normalized][source] = tostring(translated)
+                    end
+                end
+            end
+        end
+    end
+    merge(BUILTIN_TRANSLATIONS)
+    merge(customPacks)
+    return output
+end
 
 local STYLE = {
     Corner = 5,
@@ -377,6 +487,158 @@ ElementMethods.__index = ElementMethods
 local TagMethods = {}
 TagMethods.__index = TagMethods
 
+function WindowMethods:_translate(source)
+    if type(source) ~= "string" then
+        return source
+    end
+
+    local localeId = normalizeLocaleId(self.Locale or "en")
+    if type(self.Translator) == "function" then
+        local ok, translated = safeCall(self.Translator, source, localeId)
+        if ok and translated ~= nil then
+            return tostring(translated)
+        end
+    end
+
+    local translations = self.Translations or {}
+    local exact = translations[localeId]
+    if exact and exact[source] ~= nil then
+        return tostring(exact[source])
+    end
+
+    local base = localeId:match("^([^-]+)")
+    if base and base ~= localeId then
+        local basePack = translations[base]
+        if basePack and basePack[source] ~= nil then
+            return tostring(basePack[source])
+        end
+    end
+
+    return source
+end
+
+WindowMethods.Translate = WindowMethods._translate
+WindowMethods.T = WindowMethods._translate
+
+function WindowMethods:_applyTranslationBinding(binding)
+    local object = binding and binding.Object
+    if not object or not object.Parent then
+        return false
+    end
+
+    local source = binding.Source
+    if type(source) == "function" then
+        local ok, value = safeCall(source)
+        source = ok and value or ""
+    end
+
+    local translated = self:_translate(tostring(source or ""))
+    if type(binding.Transform) == "function" then
+        local ok, value = safeCall(binding.Transform, translated)
+        if ok and value ~= nil then
+            translated = value
+        end
+    end
+
+    object[binding.Property or "Text"] = translated
+    return true
+end
+
+function WindowMethods:_bindLocalized(object, property, source, transform)
+    if not object then
+        return nil
+    end
+    local binding = {
+        Object = object,
+        Property = property or "Text",
+        Source = source,
+        Transform = transform,
+    }
+    self._translationBindings[#self._translationBindings + 1] = binding
+    self:_applyTranslationBinding(binding)
+    return binding
+end
+
+function WindowMethods:RefreshTranslations()
+    local kept = {}
+    for _, binding in ipairs(self._translationBindings or {}) do
+        if self:_applyTranslationBinding(binding) then
+            kept[#kept + 1] = binding
+        end
+    end
+    self._translationBindings = kept
+
+    for _, tab in ipairs(self.Tabs or {}) do
+        if type(tab._refreshLocalizedText) == "function" then
+            tab:_refreshLocalizedText()
+        end
+        for _, section in ipairs(tab.Sections or {}) do
+            if type(section._refreshLocalizedText) == "function" then
+                section:_refreshLocalizedText()
+            end
+        end
+    end
+
+    for element in pairs(self._elements or {}) do
+        if type(element._refreshLocalizedText) == "function" then
+            element:_refreshLocalizedText()
+        elseif type(element.Refresh) == "function" and element.Type == "Dropdown" then
+            element:_refreshVisual()
+        end
+    end
+
+    for _, tag in ipairs(self.Tags or {}) do
+        if type(tag._refreshLocalizedText) == "function" then
+            tag:_refreshLocalizedText()
+        end
+    end
+
+    for _, refresh in ipairs(self._settingRefreshers or {}) do
+        safeCall(refresh)
+    end
+
+    if type(self._refreshSearchResults) == "function" then
+        self:_refreshSearchResults()
+    end
+    return self
+end
+
+function WindowMethods:SetLocale(localeId)
+    self.Locale = normalizeLocaleId(localeId)
+    self._localeExplicit = true
+    self:RefreshTranslations()
+    return self
+end
+
+function WindowMethods:GetLocale()
+    return self.Locale
+end
+
+function WindowMethods:RegisterTranslations(packs)
+    if type(packs) ~= "table" then
+        return self
+    end
+    for localeId, entries in pairs(packs) do
+        if type(entries) == "table" then
+            local normalized = normalizeLocaleId(localeId)
+            self.Translations[normalized] = self.Translations[normalized] or {}
+            for source, translated in pairs(entries) do
+                if type(source) == "string" and translated ~= nil then
+                    self.Translations[normalized][source] = tostring(translated)
+                end
+            end
+        end
+    end
+    self:RefreshTranslations()
+    return self
+end
+
+function WindowMethods:SetTranslator(translator)
+    self.Translator = type(translator) == "function" and translator or nil
+    self:RefreshTranslations()
+    return self
+end
+
 function ElementMethods:SetVisible(visible)
     self.Visible = visible ~= false
     if self.Object then
@@ -389,13 +651,16 @@ function ElementMethods:SetVisible(visible)
 end
 
 function ElementMethods:SetTitle(title)
-    self.Title = tostring(title or "")
+    self.SourceTitle = tostring(title or "")
+    self.Title = self.SourceTitle
     self.name = self.Title
     self.Name = self.Title
-    if self.TitleLabel then
-        self.TitleLabel.Text = self.Title
+    if type(self._refreshLocalizedText) == "function" then
+        self:_refreshLocalizedText()
+    elseif self.TitleLabel then
+        self.TitleLabel.Text = self.Window and self.Window:_translate(self.SourceTitle) or self.SourceTitle
     elseif self.Object and self.Object:IsA("TextButton") then
-        self.Object.Text = self.Title
+        self.Object.Text = self.Window and self.Window:_translate(self.SourceTitle) or self.SourceTitle
     end
     if self.Window then
         self.Window:_refreshElementSearchText(self)
@@ -406,17 +671,22 @@ end
 ElementMethods.SetName = ElementMethods.SetTitle
 
 function ElementMethods:SetDescription(description)
-    self.Description = tostring(description or "")
+    self.SourceDescription = tostring(description or "")
+    self.Description = self.SourceDescription
     self.description = self.Description
-    if self.DescriptionLabel then
-        self.DescriptionLabel.Text = self.Description
-        self.DescriptionLabel.Visible = self.Description ~= ""
+    if type(self._refreshLocalizedText) == "function" then
+        self:_refreshLocalizedText()
+    elseif self.DescriptionLabel then
+        self.DescriptionLabel.Text = self.Window and self.Window:_translate(self.SourceDescription) or self.SourceDescription
+        self.DescriptionLabel.Visible = self.SourceDescription ~= ""
     end
     if self.Window then
         self.Window:_refreshElementSearchText(self)
     end
     return self
 end
+
+ElementMethods.SetDesc = ElementMethods.SetDescription
 
 function ElementMethods:Lock(reason)
     self.Locked = true
@@ -531,11 +801,29 @@ local function registerElement(section, element, searchableObject)
     element.Tab = section.Tab
     element.Object = element.Object or searchableObject
     element.Title = element.Title or element.name or ""
+    element.SourceTitle = element.SourceTitle or element.Title
     element.Name = element.Title
     element.name = element.Title
     element.Description = element.Description or element.description or ""
+    element.SourceDescription = element.SourceDescription or element.Description
     element.description = element.Description
     element.Visible = true
+
+    if type(element._refreshLocalizedText) ~= "function" then
+        function element:_refreshLocalizedText()
+            local translatedTitle = self.Window:_translate(self.SourceTitle or self.Title or "")
+            local translatedDescription = self.Window:_translate(self.SourceDescription or self.Description or "")
+            if self.TitleLabel then
+                self.TitleLabel.Text = translatedTitle
+            elseif self.Object and self.Object:IsA("TextButton") then
+                self.Object.Text = translatedTitle
+            end
+            if self.DescriptionLabel then
+                self.DescriptionLabel.Text = translatedDescription
+                self.DescriptionLabel.Visible = (self.SourceDescription or "") ~= ""
+            end
+        end
+    end
     element.ForgetState = element.ForgetState == true or element.forgetState == true
     element.forgetState = element.ForgetState
 
@@ -577,6 +865,9 @@ local function registerElement(section, element, searchableObject)
 
     if type(section._refreshGroupSize) == "function" then
         task.defer(section._refreshGroupSize, section)
+    end
+    if type(element._refreshLocalizedText) == "function" then
+        element:_refreshLocalizedText()
     end
     if type(window._refreshSearchResults) == "function" then
         task.defer(window._refreshSearchResults)
@@ -665,7 +956,7 @@ end
 local function createElementHeader(parent, options, rightWidth, forcedHeight)
     options = options or {}
     local title = option(options, {"name", "Name", "title", "Title"}, "Control")
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local icon = option(options, {"icon", "Icon"}, nil)
     local hasDescription = description ~= ""
     local height = forcedHeight or (hasDescription and 72 or 44)
@@ -811,7 +1102,7 @@ end
 function SectionMethods:CreateButton(options)
     options = type(options) == "table" and options or {name = tostring(options)}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Button"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local height = description ~= "" and 72 or 44
 
     local button = create("TextButton", {
@@ -840,7 +1131,7 @@ function SectionMethods:CreateButton(options)
 
     local function run()
         if element.Locked then
-            self.Window:Notify({Title = "Control bloqueado", Content = element.LockReason or title, Duration = 3})
+            self.Window:Notify({Title = "Control locked", Content = element.LockReason or title, Duration = 3})
             return
         end
         tween(button, {BackgroundTransparency = 0})
@@ -878,7 +1169,7 @@ end
 function SectionMethods:CreateToggle(options)
     options = type(options) == "table" and options or {name = tostring(options)}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Toggle"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local default = option(options, {"value", "Value", "CurrentValue", "Default"}, false) == true
     local height = description ~= "" and 72 or 44
 
@@ -959,7 +1250,7 @@ function SectionMethods:CreateToggle(options)
 
     registerConnection(self.Window, button.MouseButton1Click:Connect(function()
         if element.Locked then
-            self.Window:Notify({Title = "Control bloqueado", Content = element.LockReason or title, Duration = 3})
+            self.Window:Notify({Title = "Control locked", Content = element.LockReason or title, Duration = 3})
             return
         end
         element:Set(not element.value)
@@ -975,7 +1266,7 @@ SectionMethods.CreateSwitch = SectionMethods.CreateToggle
 function SectionMethods:CreateSlider(options)
     options = type(options) == "table" and options or {}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Slider"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local range = option(options, {"range", "Range"}, nil)
     local minimum = tonumber(range and range[1] or option(options, {"min", "Min"}, 0)) or 0
     local maximum = tonumber(range and range[2] or option(options, {"max", "Max"}, 100)) or 100
@@ -1156,7 +1447,7 @@ end
 function SectionMethods:CreateDropdown(options)
     options = type(options) == "table" and options or {}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Dropdown"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local values = option(options, {"values", "Values", "options", "Options"}, {}) or {}
     local multiple = option(options, {"multiple", "Multiple", "MultipleOptions", "MultiSelect"}, false) == true
     local searchable = option(options, {"searchable", "Searchable"}, #values > 6) == true
@@ -1188,7 +1479,7 @@ function SectionMethods:CreateDropdown(options)
         Size = UDim2.fromOffset(92, 34),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamMedium,
-        Text = "Ninguno",
+        Text = "None",
         TextColor3 = THEME.SubText,
         TextSize = 10,
         TextXAlignment = Enum.TextXAlignment.Right,
@@ -1205,7 +1496,7 @@ function SectionMethods:CreateDropdown(options)
             Position = UDim2.fromOffset(0, headerHeight + 5),
             Size = UDim2.new(1, 0, 0, 30),
             ClearTextOnFocus = false,
-            PlaceholderText = "Filtrar opciones...",
+            PlaceholderText = "Filter options...",
             Text = "",
             Font = Enum.Font.Gotham,
             TextSize = 11,
@@ -1276,15 +1567,23 @@ function SectionMethods:CreateDropdown(options)
         return table.clone(self.value)
     end
 
+    function element:_displayValue(value)
+        return self.Window:_translate(tostring(value or ""))
+    end
+
     function element:_updateSelectedLabel()
         if #self.value == 0 then
-            self.ValueLabel.Text = "Ninguno"
+            self.ValueLabel.Text = self.Window:_translate("None")
         elseif not self.Multiple then
-            self.ValueLabel.Text = tostring(self.value[1])
+            self.ValueLabel.Text = self:_displayValue(self.value[1])
         elseif #self.value <= 2 then
-            self.ValueLabel.Text = table.concat(self.value, ", ")
+            local translated = {}
+            for _, selectedValue in ipairs(self.value) do
+                translated[#translated + 1] = self:_displayValue(selectedValue)
+            end
+            self.ValueLabel.Text = table.concat(translated, ", ")
         else
-            self.ValueLabel.Text = tostring(self.value[1]) .. " +" .. tostring(#self.value - 1)
+            self.ValueLabel.Text = self:_displayValue(self.value[1]) .. " +" .. tostring(#self.value - 1)
         end
     end
 
@@ -1348,7 +1647,9 @@ function SectionMethods:CreateDropdown(options)
     function element:_applyFilter(query)
         query = normalizeSearchText(query)
         for optionValue, entry in pairs(self.OptionButtons) do
-            entry.Button.Visible = query == "" or normalizeSearchText(optionValue):find(query, 1, true) ~= nil
+            local sourceText = normalizeSearchText(optionValue)
+            local translatedText = normalizeSearchText(self.Window:_translate(optionValue))
+            entry.Button.Visible = query == "" or sourceText:find(query, 1, true) ~= nil or translatedText:find(query, 1, true) ~= nil
         end
         if self.Open then
             self:SetOpen(true)
@@ -1382,7 +1683,7 @@ function SectionMethods:CreateDropdown(options)
                 Size = UDim2.new(1, -42, 1, 0),
                 BackgroundTransparency = 1,
                 Font = Enum.Font.Gotham,
-                Text = optionValue,
+                Text = self.Window:_translate(optionValue),
                 TextColor3 = THEME.Text,
                 TextSize = 12,
                 TextXAlignment = Enum.TextXAlignment.Left,
@@ -1405,7 +1706,7 @@ function SectionMethods:CreateDropdown(options)
             local refresh = styleInteractiveSurface(self.Window, optionButton, optionButton, function()
                 return element:_selected(optionValue)
             end, {label})
-            self.OptionButtons[optionValue] = {Button = optionButton, Label = label, Check = check, Refresh = refresh}
+            self.OptionButtons[optionValue] = {Button = optionButton, Label = label, Check = check, Refresh = refresh, Source = optionValue}
             registerConnection(self.Window, optionButton.MouseButton1Click:Connect(function()
                 if self.Multiple then
                     local selected = table.clone(self.value)
@@ -1454,9 +1755,26 @@ function SectionMethods:CreateDropdown(options)
         return self
     end
 
+    function element:_refreshLocalizedText()
+        self.TitleLabel.Text = self.Window:_translate(self.SourceTitle or self.Title or "")
+        if self.DescriptionLabel then
+            self.DescriptionLabel.Text = self.Window:_translate(self.SourceDescription or self.Description or "")
+        end
+        if self.SearchBox then
+            self.SearchBox.PlaceholderText = self.Window:_translate("Filter options...")
+        end
+        for optionValue, entry in pairs(self.OptionButtons) do
+            if entry.Label then
+                entry.Label.Text = self.Window:_translate(optionValue)
+            end
+        end
+        self:_updateSelectedLabel()
+        self:_applyFilter(self.SearchBox and self.SearchBox.Text or "")
+    end
+
     registerConnection(self.Window, button.MouseButton1Click:Connect(function()
         if element.Locked then
-            self.Window:Notify({Title = "Control bloqueado", Content = element.LockReason or title, Duration = 3})
+            self.Window:Notify({Title = "Control locked", Content = element.LockReason or title, Duration = 3})
             return
         end
         element:SetOpen(not element.Open)
@@ -1476,9 +1794,9 @@ end
 function SectionMethods:CreateInput(options)
     options = type(options) == "table" and options or {}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Input"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local default = tostring(option(options, {"value", "Value", "CurrentValue", "Default"}, "") or "")
-    local placeholder = tostring(option(options, {"placeholder", "Placeholder", "PlaceholderText"}, "Escribe aquí...") or "")
+    local placeholder = tostring(option(options, {"placeholder", "Placeholder", "PlaceholderText"}, "Type here...") or "")
     local height = description ~= "" and 72 or 44
 
     local root = create("Frame", {
@@ -1548,6 +1866,15 @@ function SectionMethods:CreateInput(options)
         return self
     end
 
+    element.SourcePlaceholder = placeholder
+    function element:_refreshLocalizedText()
+        self.TitleLabel.Text = self.Window:_translate(self.SourceTitle or self.Title or "")
+        if self.DescriptionLabel then
+            self.DescriptionLabel.Text = self.Window:_translate(self.SourceDescription or self.Description or "")
+        end
+        self.TextBox.PlaceholderText = self.Window:_translate(self.SourcePlaceholder or "Type here...")
+    end
+
     registerConnection(self.Window, textBox.FocusLost:Connect(function()
         element:Commit()
     end))
@@ -1567,7 +1894,7 @@ end
 function SectionMethods:CreateKeybind(options)
     options = type(options) == "table" and options or {}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Keybind"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local default = normalizeKey(option(options, {"value", "Value", "CurrentKeybind", "Default"}, Enum.KeyCode.Unknown), Enum.KeyCode.Unknown)
     local height = description ~= "" and 72 or 44
 
@@ -1640,7 +1967,7 @@ function SectionMethods:CreateKeybind(options)
 
     registerConnection(self.Window, button.MouseButton1Click:Connect(function()
         if element.Locked then
-            self.Window:Notify({Title = "Control bloqueado", Content = element.LockReason or title, Duration = 3})
+            self.Window:Notify({Title = "Control locked", Content = element.LockReason or title, Duration = 3})
             return
         end
         if self.Window._capturingKeybind and self.Window._capturingKeybind ~= element then
@@ -1661,10 +1988,13 @@ end
 function SectionMethods:CreateColorPicker(options)
     options = type(options) == "table" and options or {}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Color Picker"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local default = parseHexColor(option(options, {"color", "Color", "value", "Value", "Default"}, nil)) or Color3.new(1, 1, 1)
+    local transparencyOption = option(options, {"transparency", "Transparency", "alpha", "Alpha"}, nil)
+    local allowTransparency = transparencyOption ~= nil or option(options, {"allowTransparency", "AllowTransparency"}, false) == true
+    local defaultTransparency = math.clamp(tonumber(transparencyOption) or 0, 0, 1)
     local headerHeight = description ~= "" and 72 or 44
-    local panelHeight = 178
+    local panelHeight = allowTransparency and 226 or 184
 
     local root = create("Frame", {
         Name = "ColorPicker",
@@ -1674,6 +2004,7 @@ function SectionMethods:CreateColorPicker(options)
         BorderSizePixel = 0,
         ClipsDescendants = true,
     }, self.Parent)
+
     local button = create("TextButton", {
         Name = "Header",
         Size = UDim2.new(1, 0, 0, headerHeight),
@@ -1682,18 +2013,21 @@ function SectionMethods:CreateColorPicker(options)
         ZIndex = 3,
     }, root)
     local titleLabel, descriptionLabel, iconLabel = createElementHeader(button, options, 88, headerHeight)
+
     local swatch = create("Frame", {
         Name = "Swatch",
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
-        Size = UDim2.fromOffset(72, 26),
+        Size = UDim2.fromOffset(72, 28),
         BackgroundColor3 = default,
         BorderSizePixel = 0,
         ZIndex = 4,
     }, button)
     addCorner(swatch, STYLE.Corner)
     addStroke(swatch, THEME.Border, 0.04)
+
     local hexLabel = create("TextLabel", {
+        Name = "HexValue",
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
@@ -1716,6 +2050,7 @@ function SectionMethods:CreateColorPicker(options)
     addCorner(panel, STYLE.Corner)
     addStroke(panel, THEME.Border, STYLE.Stroke)
 
+    local hue, saturation, brightness = default:ToHSV()
     local element = setmetatable({
         Type = "ColorPicker",
         Stateful = true,
@@ -1735,17 +2070,149 @@ function SectionMethods:CreateColorPicker(options)
         DefaultValue = default,
         Callback = option(options, {"callback", "Callback"}, nil),
         Open = false,
-        Channels = {},
+        Hue = hue,
+        Saturation = saturation,
+        Brightness = brightness,
+        transparency = defaultTransparency,
+        Transparency = defaultTransparency,
+        DefaultTransparency = defaultTransparency,
+        AllowTransparency = allowTransparency,
     }, ElementMethods)
 
     local refreshStyle = styleInteractiveSurface(self.Window, button, button, function()
         return element.Open
     end, {titleLabel})
 
+    local colorField = create("Frame", {
+        Name = "SaturationValue",
+        Position = UDim2.fromOffset(10, 10),
+        Size = UDim2.new(1, -54, 0, 128),
+        BackgroundColor3 = Color3.fromHSV(hue, 1, 1),
+        BorderSizePixel = 0,
+        Active = true,
+        ClipsDescendants = true,
+        ZIndex = 5,
+    }, panel)
+    addCorner(colorField, STYLE.Corner)
+    addStroke(colorField, THEME.Border, 0.06)
+
+    local whiteOverlay = create("Frame", {
+        Name = "SaturationOverlay",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        BorderSizePixel = 0,
+        ZIndex = 6,
+    }, colorField)
+    addCorner(whiteOverlay, STYLE.Corner)
+    create("UIGradient", {
+        Rotation = 0,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+    }, whiteOverlay)
+
+    local blackOverlay = create("Frame", {
+        Name = "ValueOverlay",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        BorderSizePixel = 0,
+        ZIndex = 7,
+    }, colorField)
+    addCorner(blackOverlay, STYLE.Corner)
+    create("UIGradient", {
+        Rotation = 90,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(1, 0),
+        }),
+    }, blackOverlay)
+
+    local fieldSelector = create("Frame", {
+        Name = "Selector",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(saturation, 1 - brightness),
+        Size = UDim2.fromOffset(12, 12),
+        BackgroundColor3 = default,
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        ZIndex = 9,
+    }, colorField)
+    addCorner(fieldSelector, 8)
+    local fieldStroke = addStroke(fieldSelector, Color3.new(1, 1, 1), 0)
+    fieldStroke.Thickness = 2
+
+    local fieldCapture = create("TextButton", {
+        Name = "Capture",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 10,
+    }, colorField)
+
+    local hueBar = create("Frame", {
+        Name = "Hue",
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -10, 0, 10),
+        Size = UDim2.fromOffset(24, 128),
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        BorderSizePixel = 0,
+        Active = true,
+        ClipsDescendants = false,
+        ZIndex = 5,
+    }, panel)
+    addCorner(hueBar, STYLE.Corner)
+    addStroke(hueBar, THEME.Border, 0.06)
+    create("UIGradient", {
+        Rotation = 90,
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+            ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+            ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+            ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+            ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+            ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+            ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0)),
+        }),
+    }, hueBar)
+
+    local hueSelector = create("Frame", {
+        Name = "Selector",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, hue, 0),
+        Size = UDim2.new(1, 6, 0, 4),
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        BorderSizePixel = 0,
+        ZIndex = 8,
+    }, hueBar)
+    addCorner(hueSelector, 3)
+    addStroke(hueSelector, Color3.new(0, 0, 0), 0.25)
+
+    local hueCapture = create("TextButton", {
+        Name = "Capture",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 9,
+    }, hueBar)
+
+    local preview = create("Frame", {
+        Name = "Preview",
+        Position = UDim2.fromOffset(10, 146),
+        Size = UDim2.fromOffset(36, 30),
+        BackgroundColor3 = default,
+        BorderSizePixel = 0,
+        ZIndex = 5,
+    }, panel)
+    addCorner(preview, STYLE.Corner)
+    addStroke(preview, THEME.Border, 0.04)
+
     local hexBox = create("TextBox", {
         Name = "HexInput",
-        Position = UDim2.fromOffset(10, 9),
-        Size = UDim2.new(1, -20, 0, 30),
+        Position = UDim2.fromOffset(52, 146),
+        Size = UDim2.new(1, -62, 0, 30),
         BackgroundColor3 = THEME.Button,
         BackgroundTransparency = STYLE.Acrylic,
         BorderSizePixel = 0,
@@ -1761,159 +2228,284 @@ function SectionMethods:CreateColorPicker(options)
     }, panel)
     addCorner(hexBox, STYLE.Corner)
     addStroke(hexBox, THEME.Border, STYLE.Stroke)
+
+    element.ColorField = colorField
+    element.FieldSelector = fieldSelector
+    element.HueBar = hueBar
+    element.HueSelector = hueSelector
+    element.Preview = preview
     element.HexBox = hexBox
 
-    local presets = create("Frame", {
-        Name = "Presets",
-        Position = UDim2.fromOffset(10, 47),
-        Size = UDim2.new(1, -20, 0, 24),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ZIndex = 5,
-    }, panel)
-    create("UIListLayout", {
-        FillDirection = Enum.FillDirection.Horizontal,
-        HorizontalAlignment = Enum.HorizontalAlignment.Center,
-        VerticalAlignment = Enum.VerticalAlignment.Center,
-        Padding = UDim.new(0, 4),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, presets)
-
-    local presetColors = {
-        Color3.fromRGB(255, 255, 255),
-        Color3.fromRGB(208, 193, 162),
-        Color3.fromRGB(230, 70, 70),
-        Color3.fromRGB(235, 145, 55),
-        Color3.fromRGB(235, 215, 70),
-        Color3.fromRGB(75, 205, 110),
-        Color3.fromRGB(70, 135, 235),
-        Color3.fromRGB(165, 95, 225),
-        Color3.fromRGB(20, 20, 20),
-    }
-    for index, presetColor in ipairs(presetColors) do
-        local preset = create("TextButton", {
-            Name = "Preset" .. tostring(index),
-            Size = UDim2.fromOffset(16, 16),
-            BackgroundColor3 = presetColor,
-            BorderSizePixel = 0,
-            Text = "",
-            AutoButtonColor = false,
-            LayoutOrder = index,
-            ZIndex = 6,
-        }, presets)
-        addCorner(preset, 5)
-        addStroke(preset, THEME.Border, 0.05)
-        registerConnection(self.Window, preset.MouseButton1Click:Connect(function()
-            if not element.Locked then
-                element:Set(presetColor)
-            end
-        end))
-    end
-
-    local channelSpecs = {
-        {Name = "R", Key = "R", Y = 78, Color = Color3.fromRGB(230, 90, 90)},
-        {Name = "G", Key = "G", Y = 110, Color = Color3.fromRGB(90, 210, 120)},
-        {Name = "B", Key = "B", Y = 142, Color = Color3.fromRGB(90, 130, 230)},
-    }
-
-    for _, spec in ipairs(channelSpecs) do
-        local nameLabel = create("TextLabel", {
-            Position = UDim2.fromOffset(8, spec.Y),
-            Size = UDim2.fromOffset(28, 24),
-            BackgroundTransparency = 1,
-            Font = Enum.Font.GothamBold,
-            Text = spec.Name,
-            TextColor3 = spec.Color,
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextYAlignment = Enum.TextYAlignment.Center,
-            TextWrapped = false,
-            TextTruncate = Enum.TextTruncate.None,
-            ZIndex = 5,
-        }, panel)
-        local bar = create("Frame", {
-            Position = UDim2.new(0, 39, 0, spec.Y + 9),
-            Size = UDim2.new(1, -84, 0, 7),
-            BackgroundColor3 = Color3.fromRGB(42, 39, 34),
-            BorderSizePixel = 0,
-            Active = true,
-            ZIndex = 5,
-        }, panel)
-        addCorner(bar, 4)
-        local fill = create("Frame", {
-            Size = UDim2.new(0, 0, 1, 0),
-            BackgroundColor3 = spec.Color,
-            BorderSizePixel = 0,
-            ZIndex = 6,
-        }, bar)
-        addCorner(fill, 4)
-        local valueLabel = create("TextLabel", {
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, -8, 0, spec.Y),
-            Size = UDim2.fromOffset(36, 24),
+    local alphaBar, alphaGradient, alphaSelector, alphaValue
+    if allowTransparency then
+        local alphaLabel = create("TextLabel", {
+            Name = "TransparencyLabel",
+            Position = UDim2.fromOffset(10, 184),
+            Size = UDim2.fromOffset(72, 28),
             BackgroundTransparency = 1,
             Font = Enum.Font.GothamMedium,
-            Text = "0",
+            Text = "Transparency",
+            TextColor3 = THEME.SubText,
+            TextSize = 10,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 5,
+        }, panel)
+        self.Window:_bindLocalized(alphaLabel, "Text", "Transparency")
+
+        alphaBar = create("Frame", {
+            Name = "Transparency",
+            Position = UDim2.new(0, 86, 0, 192),
+            Size = UDim2.new(1, -132, 0, 12),
+            BackgroundColor3 = Color3.fromRGB(205, 205, 205),
+            BorderSizePixel = 0,
+            Active = true,
+            ClipsDescendants = true,
+            ZIndex = 5,
+        }, panel)
+        addCorner(alphaBar, 5)
+        addStroke(alphaBar, THEME.Border, 0.06)
+
+        for index = 0, 9 do
+            local cell = create("Frame", {
+                Name = "Checker",
+                Position = UDim2.new(index / 10, 0, 0, 0),
+                Size = UDim2.new(0.1, 1, 1, 0),
+                BackgroundColor3 = index % 2 == 0 and Color3.fromRGB(218, 218, 218) or Color3.fromRGB(128, 128, 128),
+                BorderSizePixel = 0,
+                ZIndex = 5,
+            }, alphaBar)
+            if index == 0 or index == 9 then
+                addCorner(cell, 4)
+            end
+        end
+
+        alphaGradient = create("Frame", {
+            Name = "ColorGradient",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundColor3 = default,
+            BorderSizePixel = 0,
+            ZIndex = 6,
+        }, alphaBar)
+        addCorner(alphaGradient, 5)
+        create("UIGradient", {
+            Rotation = 0,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+        }, alphaGradient)
+
+        alphaSelector = create("Frame", {
+            Name = "Selector",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(defaultTransparency, 0, 0.5, 0),
+            Size = UDim2.fromOffset(4, 18),
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderSizePixel = 0,
+            ZIndex = 8,
+        }, alphaBar)
+        addCorner(alphaSelector, 2)
+        addStroke(alphaSelector, Color3.new(0, 0, 0), 0.2)
+
+        local alphaCapture = create("TextButton", {
+            Name = "Capture",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Text = "",
+            AutoButtonColor = false,
+            ZIndex = 9,
+        }, alphaBar)
+
+        alphaValue = create("TextLabel", {
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -10, 0, 184),
+            Size = UDim2.fromOffset(38, 28),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamMedium,
+            Text = "0%",
             TextColor3 = THEME.SubText,
             TextSize = 10,
             TextXAlignment = Enum.TextXAlignment.Right,
             ZIndex = 5,
         }, panel)
-        element.Channels[spec.Key] = {Bar = bar, Fill = fill, Label = valueLabel, NameLabel = nameLabel}
-        registerConnection(self.Window, bar.InputBegan:Connect(function(input)
+
+        registerConnection(self.Window, alphaCapture.InputBegan:Connect(function(input)
+            if element.Locked then return end
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                self.Window._activeDragControl = {
-                    _setFromX = function(_, x)
-                        local width = bar.AbsoluteSize.X
-                        if width <= 0 then
-                            return
-                        end
-                        local alpha = math.clamp((x - bar.AbsolutePosition.X) / width, 0, 1)
-                        local r, g, b = element.value.R, element.value.G, element.value.B
-                        if spec.Key == "R" then r = alpha elseif spec.Key == "G" then g = alpha else b = alpha end
-                        element:Set(Color3.new(r, g, b))
-                    end,
-                }
-                self.Window._activeDragControl:_setFromX(input.Position.X)
+                local drag = {}
+                function drag:_setFromPosition(position)
+                    local width = alphaBar.AbsoluteSize.X
+                    if width <= 0 then return end
+                    local value = math.clamp((position.X - alphaBar.AbsolutePosition.X) / width, 0, 1)
+                    element:SetTransparency(value)
+                end
+                self.Window._activeDragControl = drag
+                drag:_setFromPosition(input.Position)
             end
         end))
     end
 
-    function element:Refresh()
-        self.Swatch.BackgroundColor3 = self.value
-        self.HexLabel.Text = colorToHex(self.value)
-        self.HexLabel.TextColor3 = contrastColor(self.value)
-        if self.HexBox and not self.HexBox:IsFocused() then
-            self.HexBox.Text = colorToHex(self.value)
+    element.AlphaBar = alphaBar
+    element.AlphaGradient = alphaGradient
+    element.AlphaSelector = alphaSelector
+    element.AlphaValue = alphaValue
+
+    local function beginFieldDrag(input)
+        if element.Locked then return end
+        local drag = {}
+        function drag:_setFromPosition(position)
+            local size = colorField.AbsoluteSize
+            if size.X <= 0 or size.Y <= 0 then return end
+            local s = math.clamp((position.X - colorField.AbsolutePosition.X) / size.X, 0, 1)
+            local v = 1 - math.clamp((position.Y - colorField.AbsolutePosition.Y) / size.Y, 0, 1)
+            element:SetHSV(element.Hue, s, v)
         end
-        for key, channel in pairs(self.Channels) do
-            local value = key == "R" and self.value.R or (key == "G" and self.value.G or self.value.B)
-            tween(channel.Fill, {Size = UDim2.new(value, 0, 1, 0)})
-            channel.Label.Text = tostring(math.floor(value * 255 + 0.5))
+        self.Window._activeDragControl = drag
+        drag:_setFromPosition(input.Position)
+    end
+
+    local function beginHueDrag(input)
+        if element.Locked then return end
+        local drag = {}
+        function drag:_setFromPosition(position)
+            local height = hueBar.AbsoluteSize.Y
+            if height <= 0 then return end
+            local h = math.clamp((position.Y - hueBar.AbsolutePosition.Y) / height, 0, 1)
+            element:SetHSV(h, element.Saturation, element.Brightness)
+        end
+        self.Window._activeDragControl = drag
+        drag:_setFromPosition(input.Position)
+    end
+
+    registerConnection(self.Window, fieldCapture.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            beginFieldDrag(input)
+        end
+    end))
+    registerConnection(self.Window, hueCapture.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            beginHueDrag(input)
+        end
+    end))
+
+    function element:Refresh()
+        local color = self.value
+        self.Swatch.BackgroundColor3 = color
+        self.HexLabel.Text = colorToHex(color)
+        self.HexLabel.TextColor3 = contrastColor(color)
+        self.Preview.BackgroundColor3 = color
+        self.ColorField.BackgroundColor3 = Color3.fromHSV(self.Hue, 1, 1)
+        self.FieldSelector.Position = UDim2.fromScale(self.Saturation, 1 - self.Brightness)
+        self.FieldSelector.BackgroundColor3 = color
+        self.HueSelector.Position = UDim2.new(0.5, 0, self.Hue, 0)
+        if self.HexBox and not self.HexBox:IsFocused() then
+            self.HexBox.Text = colorToHex(color)
+        end
+        if self.AlphaGradient then
+            self.AlphaGradient.BackgroundColor3 = color
+        end
+        if self.AlphaSelector then
+            self.AlphaSelector.Position = UDim2.new(self.transparency, 0, 0.5, 0)
+        end
+        if self.AlphaValue then
+            self.AlphaValue.Text = tostring(math.floor(self.transparency * 100 + 0.5)) .. "%"
         end
         refreshStyle()
     end
 
     function element:Set(value, skipCallback, skipSave)
-        local color = parseHexColor(value)
+        local requestedTransparency
+        local colorValue = value
+        if type(value) == "table" then
+            colorValue = value.Color or value.color or value.Value or value.value or value[1]
+            requestedTransparency = value.Transparency or value.transparency or value.Alpha or value.alpha
+        end
+
+        local color = parseHexColor(colorValue)
         if not color then
             return self
         end
-        local changed = self.value ~= color
+
+        local oldColor = self.value
+        local oldTransparency = self.transparency
+        local h, s, v = color:ToHSV()
+        if s > 0.0001 then
+            self.Hue = h
+        end
+        self.Saturation = s
+        self.Brightness = v
+        if requestedTransparency ~= nil and self.AllowTransparency then
+            self.transparency = math.clamp(tonumber(requestedTransparency) or self.transparency, 0, 1)
+            self.Transparency = self.transparency
+        end
+
         updateFlag(self, color, skipSave)
         self:Refresh()
-        if changed and not skipCallback then
-            safeCall(self.Callback, color)
+        if (oldColor ~= color or oldTransparency ~= self.transparency) and not skipCallback then
+            safeCall(self.Callback, color, self.transparency)
         end
         return self
     end
 
+    function element:SetHSV(h, s, v, skipCallback, skipSave)
+        self.Hue = math.clamp(tonumber(h) or self.Hue, 0, 1)
+        self.Saturation = math.clamp(tonumber(s) or self.Saturation, 0, 1)
+        self.Brightness = math.clamp(tonumber(v) or self.Brightness, 0, 1)
+        local color = Color3.fromHSV(self.Hue, self.Saturation, self.Brightness)
+        local oldColor = self.value
+        updateFlag(self, color, skipSave)
+        self:Refresh()
+        if oldColor ~= color and not skipCallback then
+            safeCall(self.Callback, color, self.transparency)
+        end
+        return self
+    end
+
+    function element:SetTransparency(value, skipCallback, skipSave)
+        if not self.AllowTransparency then
+            return self
+        end
+        local transparency = math.clamp(tonumber(value) or self.transparency, 0, 1)
+        local changed = transparency ~= self.transparency
+        self.transparency = transparency
+        self.Transparency = transparency
+        if not skipSave and not self.ForgetState then
+            self.Window:_scheduleSave()
+        end
+        self:Refresh()
+        if changed and not skipCallback then
+            safeCall(self.Callback, self.value, transparency)
+        end
+        return self
+    end
+
+    function element:GetTransparency()
+        return self.transparency
+    end
+
     function element:SetOpen(open)
         self.Open = open == true
-        self.Panel.Visible = self.Open
-        tween(self.Object, {Size = UDim2.new(1, 0, 0, self.Open and headerHeight + panelHeight + 5 or headerHeight)})
+        local targetHeight = self.Open and (headerHeight + panelHeight + 5) or headerHeight
+        if self.Open then
+            self.Panel.Visible = true
+        end
+        tween(self.Object, {Size = UDim2.new(1, 0, 0, targetHeight)})
+        if not self.Open then
+            task.delay(STYLE.Tween.Time, function()
+                if not self.Open and self.Panel then
+                    self.Panel.Visible = false
+                end
+            end)
+        end
         refreshStyle()
         return self
+    end
+
+    function element:_refreshLocalizedText()
+        self.TitleLabel.Text = self.Window:_translate(self.SourceTitle or self.Title or "")
+        if self.DescriptionLabel then
+            self.DescriptionLabel.Text = self.Window:_translate(self.SourceDescription or self.Description or "")
+        end
     end
 
     registerConnection(self.Window, hexBox.FocusLost:Connect(function()
@@ -1927,20 +2519,23 @@ function SectionMethods:CreateColorPicker(options)
 
     registerConnection(self.Window, button.MouseButton1Click:Connect(function()
         if element.Locked then
+            self.Window:Notify({Title = "Control locked", Content = element.LockReason or title, Duration = 3})
             return
         end
         element:SetOpen(not element.Open)
     end))
 
     registerElement(self, element, root)
+    if option(options, {"locked", "Locked"}, false) == true then
+        element:Lock(option(options, {"lockReason", "LockReason"}, nil))
+    end
     element:Refresh()
     return element
 end
-
 function SectionMethods:CreateStat(options)
     options = type(options) == "table" and options or {name = tostring(options)}
     local title = tostring(option(options, {"name", "Name", "title", "Title"}, "Stat"))
-    local description = tostring(option(options, {"description", "Description"}, "") or "")
+    local description = tostring(option(options, {"description", "Description", "desc", "Desc"}, "") or "")
     local default = option(options, {"value", "Value", "Default"}, 0)
     local height = description ~= "" and 72 or 44
 
@@ -2070,28 +2665,38 @@ function SectionMethods:CreateParagraph(options)
     local element = setmetatable({
         Type = "Paragraph",
         Title = title,
+        SourceTitle = title,
         Description = content,
+        SourceDescription = content,
         Object = frame,
         TitleLabel = titleLabel,
         ContentLabel = contentLabel,
         ForgetState = true,
     }, ElementMethods)
 
+    function element:_refreshLocalizedText()
+        local translatedTitle = self.Window:_translate(self.SourceTitle or self.Title or "")
+        local translatedContent = self.Window:_translate(self.SourceDescription or self.Description or "")
+        self.TitleLabel.Text = translatedTitle
+        self.TitleLabel.Visible = (self.SourceTitle or "") ~= ""
+        self.ContentLabel.Text = translatedContent
+    end
+
     function element:Set(value)
         if type(value) == "table" then
             if value.Title ~= nil or value.title ~= nil then
-                self.Title = tostring(value.Title or value.title or "")
-                self.TitleLabel.Text = self.Title
-                self.TitleLabel.Visible = self.Title ~= ""
+                self.SourceTitle = tostring(value.Title or value.title or "")
+                self.Title = self.SourceTitle
             end
             if value.Content ~= nil or value.content ~= nil or value.Text ~= nil or value.text ~= nil then
-                self.Description = tostring(value.Content or value.content or value.Text or value.text or "")
-                self.ContentLabel.Text = self.Description
+                self.SourceDescription = tostring(value.Content or value.content or value.Text or value.text or "")
+                self.Description = self.SourceDescription
             end
         else
-            self.Description = tostring(value or "")
-            self.ContentLabel.Text = self.Description
+            self.SourceDescription = tostring(value or "")
+            self.Description = self.SourceDescription
         end
+        self:_refreshLocalizedText()
         self.Window:_refreshElementSearchText(self)
         return self
     end
@@ -2196,6 +2801,7 @@ SectionMethods.Dropdown = SectionMethods.CreateDropdown
 SectionMethods.Input = SectionMethods.CreateInput
 SectionMethods.Keybind = SectionMethods.CreateKeybind
 SectionMethods.ColorPicker = SectionMethods.CreateColorPicker
+SectionMethods.Colorpicker = SectionMethods.CreateColorPicker
 SectionMethods.Stat = SectionMethods.CreateStat
 SectionMethods.Paragraph = SectionMethods.CreateParagraph
 SectionMethods.Label = SectionMethods.CreateLabel
@@ -2203,22 +2809,28 @@ SectionMethods.Divider = SectionMethods.CreateDivider
 SectionMethods.Group = SectionMethods.CreateGroup
 
 function TabMethods:CreateSection(options)
-    local title = normalizeTitle(options, "SECCIÓN")
+    local title = normalizeTitle(options, "SECTION")
     local section = setmetatable({
         Window = self.Window,
         Tab = self,
         Parent = self.Content,
         Title = title,
+        SourceTitle = title,
         Elements = {},
     }, SectionMethods)
     createSectionTitle(section, title)
     self.Sections[#self.Sections + 1] = section
 
-    function section:Set(value)
-        self.Title = tostring(value or "")
+    function section:_refreshLocalizedText()
         if self.TitleLabel then
-            self.TitleLabel.Text = string.upper(self.Title)
+            self.TitleLabel.Text = string.upper(self.Window:_translate(self.SourceTitle or self.Title or ""))
         end
+    end
+
+    function section:Set(value)
+        self.SourceTitle = tostring(value or "")
+        self.Title = self.SourceTitle
+        self:_refreshLocalizedText()
         for _, element in ipairs(self.Elements) do
             self.Window:_refreshElementSearchText(element)
         end
@@ -2235,6 +2847,7 @@ function TabMethods:CreateSection(options)
         return self
     end
 
+    section:_refreshLocalizedText()
     return section
 end
 
@@ -2245,6 +2858,7 @@ function TabMethods:_defaultSection()
             Tab = self,
             Parent = self.Content,
             Title = self.Title,
+            SourceTitle = self.SourceTitle or self.Title,
             Elements = {},
         }, SectionMethods)
     end
@@ -2273,17 +2887,23 @@ TabMethods.Dropdown = TabMethods.CreateDropdown
 TabMethods.Input = TabMethods.CreateInput
 TabMethods.Keybind = TabMethods.CreateKeybind
 TabMethods.ColorPicker = TabMethods.CreateColorPicker
+TabMethods.Colorpicker = TabMethods.CreateColorPicker
 TabMethods.Stat = TabMethods.CreateStat
 TabMethods.Paragraph = TabMethods.CreateParagraph
 TabMethods.Label = TabMethods.CreateLabel
 TabMethods.Divider = TabMethods.CreateDivider
 TabMethods.Group = TabMethods.CreateGroup
 
-function TabMethods:Set(title)
-    self.Title = tostring(title or "")
+function TabMethods:_refreshLocalizedText()
     if self.TitleButton then
-        self.TitleButton.Text = string.upper(self.Title)
+        self.TitleButton.Text = string.upper(self.Window:_translate(self.SourceTitle or self.Title or ""))
     end
+end
+
+function TabMethods:Set(title)
+    self.SourceTitle = tostring(title or "")
+    self.Title = self.SourceTitle
+    self:_refreshLocalizedText()
     for _, section in ipairs(self.Sections) do
         for _, element in ipairs(section.Elements) do
             self.Window:_refreshElementSearchText(element)
@@ -2388,10 +3008,17 @@ function TagMethods:SetColor(color)
 end
 
 function TagMethods:SetText(text)
-    self.Text = text ~= nil and tostring(text) or nil
+    self.SourceText = text ~= nil and tostring(text) or nil
+    self.Text = self.SourceText
+    self:_refreshLocalizedText()
+    return self
+end
+
+function TagMethods:_refreshLocalizedText()
     if self.TextLabel then
-        self.TextLabel.Text = self.Text or ""
-        self.TextLabel.Visible = self.Text ~= nil and self.Text ~= ""
+        local source = self.SourceText or self.Text or ""
+        self.TextLabel.Text = self.Window and self.Window:_translate(source) or source
+        self.TextLabel.Visible = source ~= ""
     end
     return self
 end
@@ -2467,7 +3094,7 @@ function WindowMethods:CreateTag(options)
         AutomaticSize = Enum.AutomaticSize.X,
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamBold,
-        Text = text and tostring(text) or "",
+        Text = text and self:_translate(tostring(text)) or "",
         TextColor3 = textColor,
         TextSize = 9,
         Visible = text ~= nil and tostring(text) ~= "",
@@ -2479,10 +3106,12 @@ function WindowMethods:CreateTag(options)
         TextLabel = textLabel,
         IconLabel = iconLabel,
         Text = text,
+        SourceText = text ~= nil and tostring(text) or nil,
         Icon = icon,
         Color = color,
     }, TagMethods)
     self.Tags[#self.Tags + 1] = tag
+    tag:_refreshLocalizedText()
     self.TagContainer.Visible = true
     return tag
 end
@@ -2688,6 +3317,7 @@ function WindowMethods:CreateTab(options, icon)
     local tab = setmetatable({
         Window = self,
         Title = title,
+        SourceTitle = title,
         Object = column,
         Content = column,
         Layout = layout,
@@ -2700,6 +3330,7 @@ function WindowMethods:CreateTab(options, icon)
 
     self.Tabs[#self.Tabs + 1] = tab
     tab.Index = #self.Tabs
+    tab:_refreshLocalizedText()
     self:_refreshTabPage()
     return tab
 end
@@ -2741,8 +3372,10 @@ end
 
 function WindowMethods:Notify(options)
     options = type(options) == "table" and options or {content = tostring(options)}
-    local title = tostring(option(options, {"title", "Title"}, "VanillaUI"))
-    local content = tostring(option(options, {"content", "Content", "description", "Description"}, ""))
+    local sourceTitle = tostring(option(options, {"title", "Title"}, "VanillaUI"))
+    local sourceContent = tostring(option(options, {"content", "Content", "description", "Description"}, ""))
+    local title = self:_translate(sourceTitle)
+    local content = self:_translate(sourceContent)
     local duration = math.max(0.5, tonumber(option(options, {"duration", "Duration"}, 4)) or 4) + NOTIFICATION_EXTRA_DURATION
     local onClick = option(options, {"onClick", "OnClick", "callback", "Callback"}, nil)
 
@@ -2806,6 +3439,9 @@ function WindowMethods:Notify(options)
         LayoutOrder = 2,
         ZIndex = 203,
     }, card)
+    local titleBinding = self:_bindLocalized(titleLabel, "Text", function() return sourceTitle end)
+    local contentBinding = self:_bindLocalized(contentLabel, "Text", function() return sourceContent end)
+
     local progressTrack = create("Frame", {
         Name = "ProgressTrack",
         Size = UDim2.new(1, 0, 0, 2),
@@ -2867,8 +3503,14 @@ function WindowMethods:Notify(options)
     return {
         Object = wrapper,
         Close = close,
-        SetTitle = function(_, value) titleLabel.Text = tostring(value or "") end,
-        SetContent = function(_, value) contentLabel.Text = tostring(value or "") end,
+        SetTitle = function(_, value)
+            sourceTitle = tostring(value or "")
+            self:_applyTranslationBinding(titleBinding)
+        end,
+        SetContent = function(_, value)
+            sourceContent = tostring(value or "")
+            self:_applyTranslationBinding(contentBinding)
+        end,
     }
 end
 
@@ -2948,7 +3590,7 @@ local function createFloatingPanel(window, name, title, size)
     }, panel)
     addCorner(header, STYLE.MainCorner)
 
-    create("TextLabel", {
+    local panelTitle = create("TextLabel", {
         Name = "Title",
         Position = UDim2.fromOffset(14, 0),
         Size = UDim2.new(1, -60, 1, 0),
@@ -2960,6 +3602,7 @@ local function createFloatingPanel(window, name, title, size)
         TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 82,
     }, header)
+    window:_bindLocalized(panelTitle, "Text", title, string.upper)
 
     local close = create("TextButton", {
         Name = "Close",
@@ -3005,6 +3648,13 @@ function VanillaUI:CreateWindow(options)
     end
 
     local configuration = option(options, {"configurationSaving", "ConfigurationSaving"}, {}) or {}
+    local requestedLocale = option(options, {"locale", "Locale"}, nil)
+    local detectedLocale = requestedLocale
+    if detectedLocale == nil and LocalPlayer then
+        detectedLocale = LocalPlayer.LocaleId
+    end
+    detectedLocale = normalizeLocaleId(detectedLocale or "en")
+
     local window = setmetatable({
         Title = tostring(option(options, {"title", "Title", "name", "Name"}, "VanillaUI")),
         Subtitle = tostring(option(options, {"subtitle", "Subtitle", "LoadingSubtitle"}, "Vanilla Lattice")),
@@ -3018,6 +3668,11 @@ function VanillaUI:CreateWindow(options)
         Tags = {},
         TabPage = 1,
         Flags = {},
+        Locale = detectedLocale,
+        Translations = copyTranslationPacks(option(options, {"translations", "Translations"}, {})),
+        Translator = option(options, {"translator", "Translator"}, nil),
+        _localeExplicit = requestedLocale ~= nil,
+        _translationBindings = {},
         _connections = {},
         _cleanupCallbacks = {},
         _elements = setmetatable({}, {__mode = "k"}),
@@ -3089,11 +3744,12 @@ function VanillaUI:CreateWindow(options)
         Name = "MenuButton",
         Size = UDim2.fromOffset(100, 40),
         LayoutOrder = 2,
-        Text = options.MenuText or "MENÚ",
+        Text = options.MenuText or "Menu",
     }, mainBar)
     window._refreshMenuButton = styleButton(window, menuButton, function()
         return window.MenuVisible
     end)
+    window:_bindLocalized(menuButton, "Text", options.MenuText or "Menu", string.upper)
 
     local searchButton = create("TextButton", {
         Name = "SearchButton",
@@ -3149,9 +3805,10 @@ function VanillaUI:CreateWindow(options)
         Name = "HelpButton",
         Size = UDim2.fromOffset(100, 40),
         LayoutOrder = 6,
-        Text = options.HelpText or "AYUDA",
+        Text = options.HelpText or "Help",
     }, mainBar)
     styleButton(window, helpButton)
+    window:_bindLocalized(helpButton, "Text", options.HelpText or "Help", string.upper)
 
     local mainContainer = create("Frame", {
         Name = "MainContainer",
@@ -3216,13 +3873,13 @@ function VanillaUI:CreateWindow(options)
         VerticalAlignment = Enum.VerticalAlignment.Bottom,
     }, notificationHolder)
 
-    local searchPanel = createFloatingPanel(window, "SearchPanel", "BUSCAR CONTROLES", UDim2.fromOffset(430, 420))
+    local searchPanel = createFloatingPanel(window, "SearchPanel", "Search controls", UDim2.fromOffset(430, 420))
     local searchBox = create("TextBox", {
         Name = "SearchBox",
         Position = UDim2.fromOffset(12, 56),
         Size = UDim2.new(1, -24, 0, 38),
         ClearTextOnFocus = false,
-        PlaceholderText = "Buscar FOV, ESP, ajustes...",
+        PlaceholderText = "Search FOV, ESP, settings...",
         Text = "",
         Font = Enum.Font.Gotham,
         TextSize = 12,
@@ -3232,6 +3889,7 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 81,
     }, searchPanel)
     styleSurface(searchBox, THEME.Button)
+    window:_bindLocalized(searchBox, "PlaceholderText", "Search FOV, ESP, settings...")
     create("UIPadding", {
         PaddingLeft = UDim.new(0, 11),
         PaddingRight = UDim.new(0, 11),
@@ -3260,7 +3918,7 @@ function VanillaUI:CreateWindow(options)
         Size = UDim2.new(1, 0, 0, 42),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
-        Text = "Escribe el nombre de una función o ajuste.",
+        Text = "Type the name of a feature or setting.",
         TextColor3 = THEME.SubText,
         TextSize = 11,
         TextWrapped = true,
@@ -3269,15 +3927,17 @@ function VanillaUI:CreateWindow(options)
         LayoutOrder = 1,
         ZIndex = 82,
     }, searchResults)
+    local searchHintSource = "Type the name of a feature or setting."
+    local searchHintBinding = window:_bindLocalized(searchHint, "Text", function() return searchHintSource end)
 
-    local infoPanel = createFloatingPanel(window, "InfoPanel", "VANILLAUI", UDim2.fromOffset(390, 210))
-    create("TextLabel", {
+    local infoPanel = createFloatingPanel(window, "InfoPanel", "VanillaUI", UDim2.fromOffset(390, 210))
+    local infoLabel = create("TextLabel", {
         Name = "Info",
         Position = UDim2.fromOffset(14, 58),
         Size = UDim2.new(1, -28, 1, -72),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
-        Text = window.Title .. "\n" .. window.Subtitle .. "\n\nVanillaUI " .. VanillaUI.Version .. "\nEntorno privado de Vanilla Lattice.\nDiscord: " .. DISCORD_INVITE,
+        Text = "",
         TextColor3 = THEME.SubText,
         TextSize = 12,
         TextWrapped = true,
@@ -3286,6 +3946,13 @@ function VanillaUI:CreateWindow(options)
         LineHeight = 1.12,
         ZIndex = 81,
     }, infoPanel)
+    window:_bindLocalized(infoLabel, "Text", function()
+        return window:_translate(window.Title)
+            .. "\n" .. window:_translate(window.Subtitle)
+            .. "\n\nVanillaUI " .. VanillaUI.Version
+            .. "\n" .. window:_translate("Private Vanilla Lattice environment.")
+            .. "\nDiscord: " .. DISCORD_INVITE
+    end)
     window.InfoPanel = infoPanel
 
     local infoHeader = infoPanel:FindFirstChild("TitleBar")
@@ -3313,13 +3980,14 @@ function VanillaUI:CreateWindow(options)
     end
     window.TagContainer = tagContainer or create("Frame", {Visible = false, BackgroundTransparency = 1}, infoPanel)
 
-    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "AJUSTES DE VANILLAUI", UDim2.fromOffset(410, 390))
+    local settingsPanel = createFloatingPanel(window, "SettingsPanel", "VanillaUI settings", UDim2.fromOffset(410, 390))
     window.SettingsPanel = settingsPanel
 
     local scaleObjects = {}
     local userScale = math.clamp(tonumber(option(options, {"scale", "Scale"}, 1)) or 1, 0.75, 1.15)
     local responsiveScale = 1
     local settingRefreshers = {}
+    window._settingRefreshers = settingRefreshers
 
     local function applyScale()
         local effective = math.clamp(userScale * responsiveScale, 0.66, 1.15)
@@ -3402,6 +4070,7 @@ function VanillaUI:CreateWindow(options)
             TextTruncate = Enum.TextTruncate.None,
             ZIndex = 83,
         }, button)
+        window:_bindLocalized(titleLabel, "Text", title)
         local valueLabel = create("TextLabel", {
             AnchorPoint = Vector2.new(1, 0),
             Position = UDim2.new(1, -11, 0, 0),
@@ -3419,7 +4088,7 @@ function VanillaUI:CreateWindow(options)
         local refreshStyle = styleInteractiveSurface(window, button, button, activeProvider, {titleLabel})
         local function refresh()
             local ok, value = safeCall(getValue)
-            valueLabel.Text = ok and tostring(value or "") or ""
+            valueLabel.Text = ok and window:_translate(tostring(value or "")) or ""
             refreshStyle()
         end
         settingRefreshers[#settingRefreshers + 1] = refresh
@@ -3432,7 +4101,7 @@ function VanillaUI:CreateWindow(options)
     end
 
     local scaleSteps = {0.8, 0.9, 1.0, 1.1}
-    createSettingRow("Escala de interfaz", function()
+    createSettingRow("Interface scale", function()
         return tostring(math.floor(uiScale.Scale * 100 + 0.5)) .. "%"
     end, function()
         local nearest = 1
@@ -3444,8 +4113,8 @@ function VanillaUI:CreateWindow(options)
         uiScale.Scale = scaleSteps[(nearest % #scaleSteps) + 1]
     end)
 
-    createSettingRow("Adaptación automática", function()
-        return window.AutoScale and "Activa" or "Desactivada"
+    createSettingRow("Automatic adaptation", function()
+        return window.AutoScale and "Enabled" or "Disabled"
     end, function()
         window.AutoScale = not window.AutoScale
         if type(window._updateResponsiveSize) == "function" then window._updateResponsiveSize() end
@@ -3453,34 +4122,34 @@ function VanillaUI:CreateWindow(options)
         return window.AutoScale
     end)
 
-    createSettingRow("Restablecer posición", function()
-        return "Centro superior"
+    createSettingRow("Reset position", function()
+        return "Top center"
     end, function()
         mainBar.Position = UDim2.new(0.5, 0, 0, 8)
         if type(window._syncFloatingPositions) == "function" then window._syncFloatingPositions() end
     end)
 
-    createSettingRow("Probar notificación", function()
+    createSettingRow("Test notification", function()
         return "2 s extra"
     end, function()
-        window:Notify({Title = "VanillaUI", Content = "Notificación de prueba con texto ampliado.", Duration = 3})
+        window:Notify({Title = "VanillaUI", Content = "Test notification with enlarged text.", Duration = 3})
     end)
 
     if window.ConfigurationSaving.Enabled then
-        createSettingRow("Guardar configuración", function() return "Archivo local" end, function()
+        createSettingRow("Save configuration", function() return "Local file" end, function()
             local ok, err = window:SaveConfiguration()
-            window:Notify({Title = "Configuración", Content = ok and "Configuración guardada." or tostring(err), Duration = 3})
+            window:Notify({Title = "Configuration", Content = ok and "Configuration saved." or tostring(err), Duration = 3})
         end)
-        createSettingRow("Cargar configuración", function() return "Archivo local" end, function()
+        createSettingRow("Load configuration", function() return "Local file" end, function()
             local ok, err = window:LoadConfiguration()
-            window:Notify({Title = "Configuración", Content = ok and "Configuración cargada." or tostring(err), Duration = 3})
+            window:Notify({Title = "Configuration", Content = ok and "Configuration loaded." or tostring(err), Duration = 3})
         end)
     end
 
     local discordButton = create("TextButton", {
         Name = "DiscordButton",
         Size = UDim2.new(1, -2, 0, 40),
-        Text = "Discord · Copiar invitación",
+        Text = "Discord · Copy invite",
         Font = Enum.Font.GothamMedium,
         TextSize = 12,
         TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -3488,6 +4157,7 @@ function VanillaUI:CreateWindow(options)
         ZIndex = 82,
     }, settingsList)
     styleSurface(discordButton, DISCORD_BLURPLE)
+    window:_bindLocalized(discordButton, "Text", "Discord · Copy invite")
     discordButton.BackgroundColor3 = DISCORD_BLURPLE
     discordButton.BackgroundTransparency = 0.02
     registerConnection(window, discordButton.MouseEnter:Connect(function() tween(discordButton, {BackgroundColor3 = DISCORD_BLURPLE_HOVER}) end))
@@ -3503,33 +4173,22 @@ function VanillaUI:CreateWindow(options)
         end
         window:Notify({
             Title = "Discord",
-            Content = copied and "Invitación copiada al portapapeles." or DISCORD_INVITE,
+            Content = copied and "Invite copied to clipboard." or DISCORD_INVITE,
             Duration = 3,
         })
     end))
 
     applyScale()
 
-    local helpPanel = createFloatingPanel(window, "HelpPanel", "AYUDA", UDim2.fromOffset(460, 340))
+    local helpPanel = createFloatingPanel(window, "HelpPanel", "Help", UDim2.fromOffset(460, 340))
     attachScale(helpPanel)
-    create("TextLabel", {
+    local helpLabel = create("TextLabel", {
         Name = "Help",
         Position = UDim2.fromOffset(14, 58),
         Size = UDim2.new(1, -28, 1, -72),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
-        Text = table.concat({
-            "SUPR: mostrar u ocultar VanillaUI.",
-            "MENÚ: mostrar u ocultar las categorías.",
-            "La lupa busca controles y permite saltar hasta ellos.",
-            "[L+]: aparece con más de 5 categorías y cambia de grupo.",
-            "La barra superior puede arrastrarse.",
-            "",
-            "API: CreateWindow, CreateTab, CreateSection y CreateGroup.",
-            "Elementos: Button, Toggle, Slider, Dropdown, Input,",
-            "Keybind, ColorPicker, Stat, Paragraph, Label y Divider.",
-            "Todos los controles admiten handles, flags y reordenamiento.",
-        }, "\n"),
+        Text = "",
         TextColor3 = THEME.SubText,
         TextSize = 12,
         TextWrapped = true,
@@ -3538,6 +4197,25 @@ function VanillaUI:CreateWindow(options)
         LineHeight = 1.14,
         ZIndex = 81,
     }, helpPanel)
+    local helpSources = {
+        "Press DELETE to show or hide VanillaUI.",
+        "MENU shows or hides the categories.",
+        "The magnifier searches controls and jumps to them.",
+        "[L+] appears with more than 5 categories and changes groups.",
+        "The top bar can be dragged.",
+        "",
+        "API: CreateWindow, CreateTab, CreateSection and CreateGroup.",
+        "Elements: Button, Toggle, Slider, Dropdown, Input,",
+        "Keybind, ColorPicker, Stat, Paragraph, Label and Divider.",
+        "All controls support handles, flags and reordering.",
+    }
+    window:_bindLocalized(helpLabel, "Text", function()
+        local lines = {}
+        for _, source in ipairs(helpSources) do
+            lines[#lines + 1] = source == "" and "" or window:_translate(source)
+        end
+        return table.concat(lines, "\n")
+    end)
 
     local floatingPanels = {searchPanel, infoPanel, settingsPanel, helpPanel}
 
@@ -3805,7 +4483,7 @@ function VanillaUI:CreateWindow(options)
             Size = UDim2.new(1, -22, 0, 18),
             BackgroundTransparency = 1,
             Font = Enum.Font.GothamMedium,
-            Text = element.Title,
+            Text = window:_translate(element.SourceTitle or element.Title),
             TextColor3 = THEME.Text,
             TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
@@ -3814,9 +4492,9 @@ function VanillaUI:CreateWindow(options)
             ZIndex = 83,
         }, row)
 
-        local tabTitle = element.Tab and element.Tab.Title or "VANILLAUI"
-        local sectionTitle = element.Section and element.Section.Title or "GENERAL"
-        local metadata = string.format("%s  ·  %s  ·  %s", tabTitle, sectionTitle, element.Type or "CONTROL")
+        local tabTitle = element.Tab and window:_translate(element.Tab.SourceTitle or element.Tab.Title) or "VANILLAUI"
+        local sectionTitle = element.Section and window:_translate(element.Section.SourceTitle or element.Section.Title) or "GENERAL"
+        local metadata = string.format("%s  ·  %s  ·  %s", tabTitle, sectionTitle, window:_translate(element.Type or "CONTROL"))
         local metaLabel = create("TextLabel", {
             Name = "Metadata",
             Position = UDim2.fromOffset(11, 39),
@@ -3864,14 +4542,21 @@ function VanillaUI:CreateWindow(options)
     end
 
     local function scoreSearchElement(element, terms)
-        local title = normalizeSearchText(element.Title)
-        local description = normalizeSearchText(element.Description)
+        local title = normalizeSearchText((element.Title or "") .. " " .. window:_translate(element.SourceTitle or element.Title or ""))
+        local description = normalizeSearchText((element.Description or "") .. " " .. window:_translate(element.SourceDescription or element.Description or ""))
         local flag = normalizeSearchText(element.Flag)
-        local tab = normalizeSearchText(element.Tab and element.Tab.Title or "")
-        local section = normalizeSearchText(element.Section and element.Section.Title or "")
+        local tabSource = element.Tab and (element.Tab.SourceTitle or element.Tab.Title) or ""
+        local sectionSource = element.Section and (element.Section.SourceTitle or element.Section.Title) or ""
+        local tab = normalizeSearchText(tabSource .. " " .. window:_translate(tabSource))
+        local section = normalizeSearchText(sectionSource .. " " .. window:_translate(sectionSource))
         local optionsText = ""
         if type(element.Values) == "table" then
-            optionsText = normalizeSearchText(table.concat(element.Values, " "))
+            local optionParts = {}
+            for _, optionValue in ipairs(element.Values) do
+                optionParts[#optionParts + 1] = tostring(optionValue)
+                optionParts[#optionParts + 1] = window:_translate(tostring(optionValue))
+            end
+            optionsText = normalizeSearchText(table.concat(optionParts, " "))
         end
 
         local total = 0
@@ -3906,7 +4591,8 @@ function VanillaUI:CreateWindow(options)
         local terms = expandSearchTerms(searchBox.Text)
         if #terms == 0 then
             searchHint.Visible = true
-            searchHint.Text = "Escribe el nombre de una función o ajuste."
+            searchHintSource = "Type the name of a feature or setting."
+            window:_applyTranslationBinding(searchHintBinding)
             return
         end
 
@@ -3928,7 +4614,8 @@ function VanillaUI:CreateWindow(options)
         end)
 
         searchHint.Visible = #matches == 0
-        searchHint.Text = "No se encontraron controles."
+        searchHintSource = "No controls found."
+        window:_applyTranslationBinding(searchHintBinding)
 
         window._firstSearchElement = matches[1] and matches[1].Element or nil
         local visualOrder = 1
@@ -4037,8 +4724,12 @@ function VanillaUI:CreateWindow(options)
             return
         end
 
-        if window._activeDragControl and type(window._activeDragControl._setFromX) == "function" then
-            window._activeDragControl:_setFromX(input.Position.X)
+        if window._activeDragControl then
+            if type(window._activeDragControl._setFromPosition) == "function" then
+                window._activeDragControl:_setFromPosition(input.Position)
+            elseif type(window._activeDragControl._setFromX) == "function" then
+                window._activeDragControl:_setFromX(input.Position.X)
+            end
         end
 
         if dragging then
@@ -4172,11 +4863,19 @@ function VanillaUI:CreateWindow(options)
         updateResponsiveSize()
     end))
 
+    if not window._localeExplicit and LocalPlayer then
+        registerConnection(window, LocalPlayer:GetPropertyChangedSignal("LocaleId"):Connect(function()
+            window.Locale = normalizeLocaleId(LocalPlayer.LocaleId)
+            window:RefreshTranslations()
+        end))
+    end
+
     window._cleanupFunction = function()
         window:Destroy()
     end
     GLOBAL_ENV[CLEANUP_KEY] = window._cleanupFunction
     window:_refreshTabPage()
+    window:RefreshTranslations()
 
     return window
 end
@@ -4202,6 +4901,7 @@ function VanillaUI:Destroy()
 end
 
 VanillaUI.Theme = THEME
+VanillaUI.Translations = BUILTIN_TRANSLATIONS
 VanillaUI.Window = WindowMethods
 VanillaUI.DiscordInvite = DISCORD_INVITE
 
